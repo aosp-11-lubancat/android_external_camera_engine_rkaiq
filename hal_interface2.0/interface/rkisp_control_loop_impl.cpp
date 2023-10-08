@@ -26,7 +26,7 @@
 #include <mediactl.h>
 #include <v4l2_device.h>
 #include <base/xcam_log.h>
-#include <linux/rk-camera-module.h>
+#include <rk-camera-module.h>
 #include <RkAiqManager.h>
 #include <RkAiqCalibDb.h>
 #include <sys/ioctl.h>
@@ -34,6 +34,7 @@
 #include <mediactl/mediactl-priv.h>
 
 //local
+#include "rkisp_control_aiq.h"
 #include "rkisp_control_loop.h"
 #include "rk_aiq_user_api_sysctl.h"
 #include "rkcamera_vendor_tags.h"
@@ -42,6 +43,7 @@
 #include "rk_aiq_user_api_imgproc.h"
 
 #include "rkaiq.h"
+#include "rk_aiq_api_private.h"
 #include "AiqCameraHalAdapter.h"
 
 #include "isp20/CamHwIsp20.h"
@@ -344,15 +346,21 @@ int rkisp_cl_rkaiq_init(void** cl_ctx, const char* tuning_file_path,
     xcam_get_log_level();
     LOGD("--------------------------rk_aiq_uapi_sysctl_init");
     rk_aiq_sys_ctx_t* aiq_ctx = NULL;
-    aiq_ctx = rk_aiq_uapi_sysctl_init(sns_entity_name, RK_3A_TUNING_FILE_PATH, NULL, NULL);
+    AiqCameraHalAdapter *gAiqCameraHalAdapter = new AiqCameraHalAdapter();
+    rk_aiq_metas_cb sMetas_cb = [=] (rk_aiq_metas_t* metas) -> XCamReturn {
+        LOGD("----------rkisp_aiq_metas_cb---metas.frame_id:%d-----------",metas->frame_id);
+        if((gAiqCameraHalAdapter)!=NULL){
+            gAiqCameraHalAdapter->metaCallback();
+        }
+        return XCAM_RETURN_NO_ERROR;
+    };
+    aiq_ctx = rk_aiq_uapi_sysctl_init(sns_entity_name, RK_3A_TUNING_FILE_PATH, NULL,sMetas_cb);
     RkCamera3VendorTags::get_vendor_tag_ops(&rkcamera_vendor_tag_ops_instance);
     set_camera_metadata_vendor_ops(&rkcamera_vendor_tag_ops_instance);
 
     LOGD("@%s(%d)aiq_ctx pointer(%p)",__FUNCTION__, __LINE__, aiq_ctx);
 
-    AiqCameraHalAdapter *gAiqCameraHalAdapter = NULL;
     if(aiq_ctx){
-        gAiqCameraHalAdapter = new AiqCameraHalAdapter(aiq_ctx->_rkAiqManager,aiq_ctx->_analyzer,aiq_ctx->_camHw);
         gAiqCameraHalAdapter->init(callbacks_ops);
         gAiqCameraHalAdapter->set_aiq_ctx(aiq_ctx);
     }
@@ -382,6 +390,33 @@ int rkisp_cl_prepare(void* cl_ctx,
         //default
         work_mode = RK_AIQ_WORKING_MODE_NORMAL;
     }
+    rk_aiq_static_info_t s_info;
+    rk_aiq_uapi_sysctl_getStaticMetas(aiq_ctx->_sensor_entity_name, &s_info);
+    // check if hdr mode is supported
+    if (work_mode != 0) {
+        bool b_work_mode_supported = false;
+        rk_aiq_sensor_info_t* sns_info = &s_info.sensor_info;
+        for (int i = 0; i < SUPPORT_FMT_MAX; i++)
+            // TODO, should decide the resolution firstly,
+            // then check if the mode is supported on this
+            // resolution
+            if ((sns_info->support_fmt[i].hdr_mode == 5/*HDR_X2*/ &&
+                work_mode == RK_AIQ_WORKING_MODE_ISP_HDR2) ||
+                (sns_info->support_fmt[i].hdr_mode == 6/*HDR_X3*/ &&
+                 work_mode == RK_AIQ_WORKING_MODE_ISP_HDR3)) {
+                b_work_mode_supported = true;
+                break;
+            }
+
+        if (!b_work_mode_supported) {
+            LOGE("ctx->_sensor_entity_name:%s",aiq_ctx->_sensor_entity_name);
+            LOGE("\nWARNING !!!"
+                   "work mode %d is not supported, changed to normal !!!\n\n",
+                   work_mode);
+            work_mode = RK_AIQ_WORKING_MODE_NORMAL;
+        }
+    }
+
     ret = rk_aiq_uapi_sysctl_prepare(aiq_ctx, prepare_params->width, prepare_params->height, work_mode);
     gAiqCameraHalAdapter->set_static_metadata (prepare_params->staticMeta);
     gAiqCameraHalAdapter->set_working_mode(work_mode);
@@ -399,6 +434,7 @@ int rkisp_cl_start(void* cl_ctx) {
 
     AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
     rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    gAiqCameraHalAdapter->start();
     ret = rk_aiq_uapi_sysctl_start(aiq_ctx);
 
     LOGD("--------------------------rkisp_cl_start done");
@@ -429,6 +465,8 @@ int rkisp_cl_stop(void* cl_ctx) {
     rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
     LOGD("--------------------------rkisp_cl_stop");
 
+    gAiqCameraHalAdapter->stop();
+
     ret = rk_aiq_uapi_sysctl_stop(aiq_ctx, false);
 
     LOGD("--------------------------rkisp_cl_stop done");
@@ -439,6 +477,7 @@ void rkisp_cl_deinit(void* cl_ctx) {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     LOGD("--------------------------rkisp_cl_deinit");
     AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    gAiqCameraHalAdapter->deInit();
     rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
     rk_aiq_uapi_sysctl_deinit(aiq_ctx);
     LOGD("--------------------------rkisp_cl_deinit done");
@@ -447,3 +486,41 @@ void rkisp_cl_deinit(void* cl_ctx) {
     }
 }
 
+int rkisp_cl_setBrightness(const void* cl_ctx, unsigned int level) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    return (int) rk_aiq_uapi_setBrightness(aiq_ctx, level);
+}
+int rkisp_cl_getBrightness(const void* cl_ctx, unsigned int*level) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    return (int) rk_aiq_uapi_getBrightness(aiq_ctx, level);
+}
+
+int rkisp_cl_setContrast(const void* cl_ctx, unsigned int level) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    return (int) rk_aiq_uapi_setContrast(aiq_ctx, level);
+}
+int rkisp_cl_getContrast(const void* cl_ctx, unsigned int *level) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    return (int) rk_aiq_uapi_getContrast(aiq_ctx, level);
+}
+
+int rkisp_cl_setSaturation(const void* cl_ctx, unsigned int level) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    return (int) rk_aiq_uapi_setSaturation(aiq_ctx, level);
+}
+int rkisp_cl_getSaturation(const void* cl_ctx, unsigned int *level) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    return (int) rk_aiq_uapi_getSaturation(aiq_ctx, level);
+}
+
+void setMulCamConc(const void* cl_ctx, bool cc) {
+    AiqCameraHalAdapter * gAiqCameraHalAdapter = AIQ_CONTEXT_CAST (cl_ctx);
+    rk_aiq_sys_ctx_t *aiq_ctx = gAiqCameraHalAdapter->get_aiq_ctx();
+    rk_aiq_uapi_sysctl_setMulCamConc(aiq_ctx, true);
+}

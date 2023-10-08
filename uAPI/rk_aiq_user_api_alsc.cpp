@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2019 Rockchip Corporation
+ * Copyright (c) 2019-2022 Rockchip Eletronics Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,11 +12,10 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
-
 #include "rk_aiq_user_api_alsc.h"
-#include "RkAiqHandleInt.h"
+
+#include "algo_handlers/RkAiqAlscHandle.h"
 
 RKAIQ_BEGIN_DECLARE
 
@@ -27,7 +26,9 @@ RKAIQ_BEGIN_DECLARE
 XCamReturn
 rk_aiq_user_api_alsc_SetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_lsc_attrib_t attr)
 {
+    CHECK_USER_API_ENABLE2(sys_ctx);
     CHECK_USER_API_ENABLE(RK_AIQ_ALGO_TYPE_ALSC);
+    RKAIQ_API_SMART_LOCK(sys_ctx);
     /*  RkAiqAlscHandleInt* algo_handle =
           algoHandle<RkAiqAlscHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_ALSC);
 
@@ -41,6 +42,7 @@ rk_aiq_user_api_alsc_SetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_lsc_attri
 XCamReturn
 rk_aiq_user_api_alsc_GetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_lsc_attrib_t *attr)
 {
+    RKAIQ_API_SMART_LOCK(sys_ctx);
     RkAiqAlscHandleInt* algo_handle =
         algoHandle<RkAiqAlscHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_ALSC);
 
@@ -54,6 +56,7 @@ rk_aiq_user_api_alsc_GetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_lsc_attri
 XCamReturn
 rk_aiq_user_api_alsc_QueryLscInfo(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_lsc_querry_info_t *lsc_querry_info)
 {
+    RKAIQ_API_SMART_LOCK(sys_ctx);
     RkAiqAlscHandleInt* algo_handle =
         algoHandle<RkAiqAlscHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_ALSC);
 

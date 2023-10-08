@@ -36,8 +36,8 @@ protected:
 public:
     virtual ~BufferData () {}
 
-    virtual uint8_t *map () = 0;
-    virtual bool unmap () = 0;
+    virtual uint8_t *map () { return nullptr; };
+    virtual bool unmap () { return false; };
     virtual int get_fd () {
         return -1;
     }
@@ -117,7 +117,7 @@ private:
     void release (SmartPtr<BufferData> &data);
     XCAM_DEAD_COPY (BufferPool);
 
-private:
+protected:
     Mutex                    _mutex;
     VideoBufferInfo          _buffer_info;
     SafeList<BufferData>     _buf_list;

@@ -17,98 +17,98 @@
  *
  */
 
-#include "rk_aiq_algo_types_int.h"
 #include "accm/rk_aiq_algo_accm_itf.h"
 #include "accm/rk_aiq_accm_algo.h"
+#include "rk_aiq_algo_types.h"
 #include "xcam_log.h"
 
 RKAIQ_BEGIN_DECLARE
 
-
-
 static XCamReturn
 create_context(RkAiqAlgoContext **context, const AlgoCtxInstanceCfg* cfg)
 {
-    LOGI_ACCM( "%s: (enter)\n", __FUNCTION__);
-    AlgoCtxInstanceCfgInt *cfgInt = (AlgoCtxInstanceCfgInt*)cfg;
+    LOG1_ACCM( "%s: (enter)\n", __FUNCTION__);
     RkAiqAlgoContext *ctx = new RkAiqAlgoContext();
     if (ctx == NULL) {
         LOGE_ACCM( "%s: create ccm context fail!\n", __FUNCTION__);
         return XCAM_RETURN_ERROR_MEM;
     }
-    AccmInit(&ctx->accm_para, cfgInt->calib);
+        AccmInit(&ctx->accm_para, cfg->calibv2);
+
     *context = ctx;
 
-    LOGI_ACCM( "%s: (exit)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (exit)\n", __FUNCTION__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 static XCamReturn
 destroy_context(RkAiqAlgoContext *context)
 {
-    LOGI_ACCM( "%s: (enter)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (enter)\n", __FUNCTION__);
 
     AccmRelease((accm_handle_t)context->accm_para);
     delete context;
-    LOGI_ACCM( "%s: (exit)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (exit)\n", __FUNCTION__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 static XCamReturn
 prepare(RkAiqAlgoCom* params)
 {
-    LOGI_ACCM( "%s: (enter)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (enter)\n", __FUNCTION__);
     accm_handle_t hAccm = (accm_handle_t)(params->ctx->accm_para);
-    //hdr mode
-    hAccm->accmSwInfo.hdr_mode = params->u.prepare.working_mode;
-    RkAiqAlgoConfigAccmInt *para = (RkAiqAlgoConfigAccmInt*)params;
+    //RkAiqAlgoConfigAccmInt *para = (RkAiqAlgoConfigAccmInt*)params;
+    hAccm->accmSwInfo.prepare_type = params->u.prepare.conf_type;
+    if(!!(params->u.prepare.conf_type & RK_AIQ_ALGO_CONFTYPE_UPDATECALIB)){
+        RkAiqAlgoConfigAccm* confPara = (RkAiqAlgoConfigAccm*)params;
+
+        hAccm->calibV2Ccm =
+                (CalibDbV2_Ccm_Para_V2_t*)(CALIBDBV2_GET_MODULE_PTR(confPara->com.u.prepare.calibv2, ccm_calib));
+    }
     AccmPrepare((accm_handle_t)(params->ctx->accm_para));
 
-    LOGI_ACCM( "%s: (exit)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (exit)\n", __FUNCTION__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 static XCamReturn
 pre_process(const RkAiqAlgoCom* inparams, RkAiqAlgoResCom* outparams)
 {
-    LOGI_ACCM( "%s: (enter)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (enter)\n", __FUNCTION__);
     AccmPreProc((accm_handle_t)(inparams->ctx->accm_para));
 
-    LOGI_ACCM( "%s: (exit)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (exit)\n", __FUNCTION__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 static XCamReturn
 processing(const RkAiqAlgoCom* inparams, RkAiqAlgoResCom* outparams)
 {
-    LOGI_ACCM( "%s: (enter)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (enter)\n", __FUNCTION__);
 
-    RkAiqAlgoProcAccmInt *procAccm = (RkAiqAlgoProcAccmInt*)inparams;
-    RkAiqAlgoProcResAccmInt *proResAccm = (RkAiqAlgoProcResAccmInt*)outparams;
+    RkAiqAlgoProcAccm *procAccm = (RkAiqAlgoProcAccm*)inparams;
+    RkAiqAlgoProcResAccm *proResAccm = (RkAiqAlgoProcResAccm*)outparams;
     accm_handle_t hAccm = (accm_handle_t)(inparams->ctx->accm_para);
-    RkAiqAlgoProcAccmInt* procPara = (RkAiqAlgoProcAccmInt*)inparams;
-    procAccm->accm_sw_info.hdr_mode = hAccm->accmRest.currentHdrNormalMode;
-    procAccm->accm_sw_info.grayMode = procPara->rk_com.u.proc.gray_mode;
+
+    procAccm->accm_sw_info.grayMode = procAccm->com.u.proc.gray_mode;
+    procAccm->accm_sw_info.ccmConverged = hAccm->accmSwInfo.ccmConverged;
     hAccm->accmSwInfo = procAccm->accm_sw_info;
-    LOGI_ACCM( "%s accm_proc_com.u.init:%d \n", __FUNCTION__, inparams->u.proc.init);
-    LOGD_ACCM( "%s: sensorGain:%f, awbGain:%f,%f,  awbIIRDampCoef:%f\n", __FUNCTION__,
-               hAccm->accmSwInfo.sensorGain,
-               hAccm->accmSwInfo.awbGain[0], hAccm->accmSwInfo.awbGain[1],
-               hAccm->accmSwInfo.awbIIRDampCoef);
+    //LOGI_ACCM( "%s accm_proc_com.u.init:%d \n", __FUNCTION__, inparams->u.proc.init);
+    LOGD_ACCM( "%s: awbIIRDampCoef:%f\n", __FUNCTION__, hAccm->accmSwInfo.awbIIRDampCoef);
 
     AccmConfig(hAccm);
-    memcpy(&proResAccm->accm_proc_res_com.accm_hw_conf, &hAccm->ccmHwConf, sizeof(rk_aiq_ccm_cfg_t));
-
-    LOGI_ACCM( "%s: (exit)\n", __FUNCTION__);
+    memcpy(&proResAccm->accm_hw_conf, &hAccm->ccmHwConf, sizeof(rk_aiq_ccm_cfg_t));
+    proResAccm->ccm_update = hAccm->update ||hAccm->updateAtt || (!hAccm->accmSwInfo.ccmConverged);
+    LOG1_ACCM( "%s: (exit)\n", __FUNCTION__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 static XCamReturn
 post_process(const RkAiqAlgoCom* inparams, RkAiqAlgoResCom* outparams)
 {
-    LOGI_ACCM( "%s: (enter)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (enter)\n", __FUNCTION__);
 
-    LOGI_ACCM( "%s: (exit)\n", __FUNCTION__);
+    LOG1_ACCM( "%s: (exit)\n", __FUNCTION__);
     return XCAM_RETURN_NO_ERROR;
 
 }

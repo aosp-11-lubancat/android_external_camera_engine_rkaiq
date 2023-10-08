@@ -1,5 +1,5 @@
 
-#include "rk_aiq_types_algo_adebayer_prvt.h"
+#include "rk_aiq_algo_adebayer.h"
 
 #ifndef MIN
 #define MIN(a,b)             ((a) <= (b) ? (a):(b))
@@ -15,36 +15,39 @@ calibDbParamConvertion
     AdebayerConfig_t *config, int iso
 )
 {
+    const CalibDb_RKDM_t *calib_dm =
+        (CalibDb_RKDM_t*)(CALIBDB_GET_MODULE_PTR((void*)pCalib, dm));
+
     for (int i = 0; i < 5; i++)
     {
-        config->filter1_coe[i] = pCalib->dm.debayer_filter1[i];
-        config->filter2_coe[i] = pCalib->dm.debayer_filter2[i];
+        config->filter1_coe[i] = calib_dm->debayer_filter1[i];
+        config->filter2_coe[i] = calib_dm->debayer_filter2[i];
     }
-    config->gain_offset = pCalib->dm.debayer_gain_offset;
+    config->gain_offset = calib_dm->debayer_gain_offset;
 
     int sharp_strength_tmp[9];
 
     for (int i = 0; i < 9; i ++)
     {
-        float iso_index             = pCalib->dm.ISO[i];
+        float iso_index             = calib_dm->ISO[i];
         int gain                    = (int)(log((float)iso_index / 50) / log((float)2));
-        sharp_strength_tmp[gain]    = pCalib->dm.sharp_strength[i];
+        sharp_strength_tmp[gain]    = calib_dm->sharp_strength[i];
     }
-    config->offset = pCalib->dm.debayer_offset;
+    config->offset = calib_dm->debayer_offset;
 
     int hfOffset_tmp[9];
     for (int i = 0; i < 9; i ++)
     {
-        float iso_index             = pCalib->dm.ISO[i];
+        float iso_index             = calib_dm->ISO[i];
         int gain                    = (int)(log((float)iso_index / 50) / log((float)2));
-        hfOffset_tmp[gain]  = pCalib->dm.debayer_hf_offset[i];
+        hfOffset_tmp[gain]  = calib_dm->debayer_hf_offset[i];
     }
-    config->clip_en = pCalib->dm.debayer_clip_en;
-    config->filter_g_en = pCalib->dm.debayer_filter_g_en;
-    config->filter_c_en = pCalib->dm.debayer_filter_c_en;
-    config->thed0 = pCalib->dm.debayer_thed0;
-    config->thed1 = pCalib->dm.debayer_thed1;
-    config->dist_scale = pCalib->dm.debayer_dist_scale;
+    config->clip_en = calib_dm->debayer_clip_en;
+    config->filter_g_en = calib_dm->debayer_filter_g_en;
+    config->filter_c_en = calib_dm->debayer_filter_c_en;
+    config->thed0 = calib_dm->debayer_thed0;
+    config->thed1 = calib_dm->debayer_thed1;
+    config->dist_scale = calib_dm->debayer_dist_scale;
 
     unsigned char false_color_remove_strength_table[10][2] = {
         {0, 19},
@@ -59,10 +62,10 @@ calibDbParamConvertion
         {9, 10}
     };
 
-    int index = pCalib->dm.debayer_cnr_strength;
+    int index = calib_dm->debayer_cnr_strength;
     config->order_min = false_color_remove_strength_table[index][0];
     config->order_max = false_color_remove_strength_table[index][1];
-    config->shift_num = pCalib->dm.debayer_shift_num;
+    config->shift_num = calib_dm->debayer_shift_num;
     //select sharp params
     int iso_low, iso_high;
     int gain_high, gain_low;
@@ -107,168 +110,97 @@ AdebayerFullParamsInit
     AdebayerContext_t *pAdebayerCtx
 )
 {
-    pAdebayerCtx->full_param.enable = pAdebayerCtx->pCalibDb->dm.debayer_en;
-    for (int i = 0; i < 9; i++) {
-        pAdebayerCtx->full_param.iso[i] = pAdebayerCtx->pCalibDb->dm.ISO[i];
-        pAdebayerCtx->full_param.hf_offset[i] = pAdebayerCtx->pCalibDb->dm.debayer_hf_offset[i];
-        pAdebayerCtx->full_param.sharp_strength[i] = pAdebayerCtx->pCalibDb->dm.sharp_strength[i];
+    if (pAdebayerCtx->pCalibDb) {
+        const CalibDb_RKDM_t *calib_dm =
+            (CalibDb_RKDM_t*)(CALIBDB_GET_MODULE_PTR(pAdebayerCtx->pCalibDb, dm));
+
+        pAdebayerCtx->full_param.enable = calib_dm->debayer_en;
+        for (int i = 0; i < 9; i++) {
+            pAdebayerCtx->full_param.iso[i] = calib_dm->ISO[i];
+            pAdebayerCtx->full_param.hf_offset[i] = calib_dm->debayer_hf_offset[i];
+            pAdebayerCtx->full_param.sharp_strength[i] = calib_dm->sharp_strength[i];
+        }
+        for (int i = 0; i < 5; i++) {
+            pAdebayerCtx->full_param.filter1[i] = calib_dm->debayer_filter1[i];
+            pAdebayerCtx->full_param.filter2[i] = calib_dm->debayer_filter2[i];
+        }
+        pAdebayerCtx->full_param.clip_en = calib_dm->debayer_clip_en;
+        pAdebayerCtx->full_param.filter_g_en = calib_dm->debayer_filter_g_en;
+        pAdebayerCtx->full_param.filter_c_en = calib_dm->debayer_filter_c_en;
+        pAdebayerCtx->full_param.thed0 = calib_dm->debayer_thed0;
+        pAdebayerCtx->full_param.thed1 = calib_dm->debayer_thed1;
+        pAdebayerCtx->full_param.dist_scale = calib_dm->debayer_dist_scale;
+        pAdebayerCtx->full_param.gain_offset = calib_dm->debayer_gain_offset;
+        pAdebayerCtx->full_param.offset = calib_dm->debayer_offset;
+        pAdebayerCtx->full_param.shift_num = calib_dm->debayer_shift_num;
+        pAdebayerCtx->full_param.cnr_strength = calib_dm->debayer_cnr_strength;
+    } else if (pAdebayerCtx->pCalibDbV2) {
+        CalibDbV2_Debayer_t* debayer =
+            (CalibDbV2_Debayer_t*)(CALIBDBV2_GET_MODULE_PTR(pAdebayerCtx->pCalibDbV2, debayer));
+        pAdebayerCtx->full_param.enable = debayer->param.debayer_en;
+        for (int i = 0; i < 9; i++) {
+            pAdebayerCtx->full_param.iso[i] = debayer->param.array.ISO[i];
+            pAdebayerCtx->full_param.hf_offset[i] = debayer->param.array.debayer_hf_offset[i];
+            pAdebayerCtx->full_param.sharp_strength[i] = debayer->param.array.sharp_strength[i];
+        }
+        for (int i = 0; i < 5; i++) {
+            pAdebayerCtx->full_param.filter1[i] = debayer->param.debayer_filter1[i];
+            pAdebayerCtx->full_param.filter2[i] = debayer->param.debayer_filter2[i];
+        }
+        pAdebayerCtx->full_param.clip_en = debayer->param.debayer_clip_en;
+        pAdebayerCtx->full_param.filter_g_en = debayer->param.debayer_filter_g_en;
+        pAdebayerCtx->full_param.filter_c_en = debayer->param.debayer_filter_c_en;
+        pAdebayerCtx->full_param.thed0 = debayer->param.debayer_thed0;
+        pAdebayerCtx->full_param.thed1 = debayer->param.debayer_thed1;
+        pAdebayerCtx->full_param.dist_scale = debayer->param.debayer_dist_scale;
+        pAdebayerCtx->full_param.gain_offset = debayer->param.debayer_gain_offset;
+        pAdebayerCtx->full_param.offset = debayer->param.debayer_offset;
+        pAdebayerCtx->full_param.shift_num = debayer->param.debayer_shift_num;
+        pAdebayerCtx->full_param.cnr_strength = debayer->param.debayer_cnr_strength;
+        pAdebayerCtx->full_param.updated = false;
+    } else {
+        LOGE_ADEBAYER("%s(%d): calibDb are all null!\n", __FUNCTION__, __LINE__);
     }
-    for (int i = 0; i < 5; i++) {
-        pAdebayerCtx->full_param.filter1[i] = pAdebayerCtx->pCalibDb->dm.debayer_filter1[i];
-        pAdebayerCtx->full_param.filter2[i] = pAdebayerCtx->pCalibDb->dm.debayer_filter2[i];
-    }
-    pAdebayerCtx->full_param.clip_en = pAdebayerCtx->pCalibDb->dm.debayer_clip_en;
-    pAdebayerCtx->full_param.filter_g_en = pAdebayerCtx->pCalibDb->dm.debayer_filter_g_en;
-    pAdebayerCtx->full_param.filter_c_en = pAdebayerCtx->pCalibDb->dm.debayer_filter_c_en;
-    pAdebayerCtx->full_param.thed0 = pAdebayerCtx->pCalibDb->dm.debayer_thed0;
-    pAdebayerCtx->full_param.thed1 = pAdebayerCtx->pCalibDb->dm.debayer_thed1;
-    pAdebayerCtx->full_param.dist_scale = pAdebayerCtx->pCalibDb->dm.debayer_dist_scale;
-    pAdebayerCtx->full_param.gain_offset = pAdebayerCtx->pCalibDb->dm.debayer_gain_offset;
-    pAdebayerCtx->full_param.offset = pAdebayerCtx->pCalibDb->dm.debayer_offset;
-    pAdebayerCtx->full_param.shift_num = pAdebayerCtx->pCalibDb->dm.debayer_shift_num;
-    pAdebayerCtx->full_param.cnr_strength = pAdebayerCtx->pCalibDb->dm.debayer_cnr_strength;
 
     return 0;
 }
 
-//debayer inint
 XCamReturn
-AdebayerInit
-(
-    AdebayerContext_t *pAdebayerCtx
-)
+AdebayerTranslateParamsAtManualMode(AdebayerContext_t *pAdebayerCtx)
 {
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-    if(pAdebayerCtx == NULL) {
-        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
-        return XCAM_RETURN_ERROR_PARAM;
-    }
-    memset(pAdebayerCtx, 0, sizeof(AdebayerContext_t));
-    pAdebayerCtx->state = ADEBAYER_STATE_INITIALIZED;
-
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
-    return XCAM_RETURN_NO_ERROR;
-}
-
-//debayer release
-XCamReturn
-AdebayerRelease
-(
-    AdebayerContext_t *pAdebayerCtx
-)
-{
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-    if(pAdebayerCtx == NULL) {
-        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
-        return XCAM_RETURN_ERROR_PARAM;
-    }
-    AdebayerStop(pAdebayerCtx);
-
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
-    return XCAM_RETURN_NO_ERROR;
-}
-
-//debayer config
-XCamReturn
-AdebayerConfig
-(
-    AdebayerContext_t *pAdebayerCtx,
-    AdebayerConfig_t* pAdebayerConfig
-)
-{
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-
-    if(pAdebayerCtx == NULL) {
+    if(!pAdebayerCtx) {
         LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
         return XCAM_RETURN_ERROR_PARAM;
     }
 
-    if(pAdebayerConfig == NULL) {
-        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
-        return XCAM_RETURN_ERROR_PARAM;
+    for (int i = 0; i < 5; i++)
+    {
+        pAdebayerCtx->config.filter1_coe[i] = pAdebayerCtx->manualAttrib.filter1[i];
+        pAdebayerCtx->config.filter2_coe[i] = pAdebayerCtx->manualAttrib.filter2[i];
     }
-    //TO DO
+    pAdebayerCtx->config.gain_offset    = pAdebayerCtx->manualAttrib.gain_offset;
+    pAdebayerCtx->config.offset         = pAdebayerCtx->manualAttrib.offset;
+    pAdebayerCtx->config.clip_en        = pAdebayerCtx->manualAttrib.clip_en;
+    pAdebayerCtx->config.filter_g_en    = pAdebayerCtx->manualAttrib.filter_g_en;
+    pAdebayerCtx->config.filter_c_en    = pAdebayerCtx->manualAttrib.filter_c_en;
+    pAdebayerCtx->config.thed0          = pAdebayerCtx->manualAttrib.thed0;
+    pAdebayerCtx->config.thed1          = pAdebayerCtx->manualAttrib.thed1;
+    pAdebayerCtx->config.dist_scale     = pAdebayerCtx->manualAttrib.dist_scale;
+    pAdebayerCtx->config.shift_num      = pAdebayerCtx->manualAttrib.shift_num;
+    pAdebayerCtx->config.max_ratio      = pAdebayerCtx->manualAttrib.sharp_strength;
+    pAdebayerCtx->config.hf_offset      = pAdebayerCtx->manualAttrib.hf_offset;
 
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 XCamReturn
-AdebayerStart
-(
-    AdebayerContext_t *pAdebayerCtx
-)
+AdebayerTranslateParamsAtAutoMode(AdebayerContext_t *pAdebayerCtx, int8_t ISO)
 {
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-
-    if(pAdebayerCtx == NULL) {
-        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
-        return XCAM_RETURN_ERROR_PARAM;
-    }
-    AdebayerFullParamsInit(pAdebayerCtx);
-    pAdebayerCtx->state = ADEBAYER_STATE_RUNNING;
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
-    return XCAM_RETURN_NO_ERROR;
-}
-
-XCamReturn
-AdebayerStop
-(
-    AdebayerContext_t *pAdebayerCtx
-)
-{
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-
-    if(pAdebayerCtx == NULL) {
-        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
-        return XCAM_RETURN_ERROR_PARAM;
-    }
-    pAdebayerCtx->state = ADEBAYER_STATE_STOPPED;
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
-    return XCAM_RETURN_NO_ERROR;
-}
-
-//debayer reconfig
-XCamReturn
-AdebayerReConfig
-(
-    AdebayerContext_t* pAdebayerCtx,
-    AdebayerConfig_t*  pAdebayerConfig
-)
-{
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-    //need todo what?
-
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
-    return XCAM_RETURN_NO_ERROR;
-}
-
-//debayer preprocess
-XCamReturn AdebayerPreProcess(AdebayerContext_t *pAdebayerCtx)
-{
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
-    //need todo what?
-
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
-    return XCAM_RETURN_NO_ERROR;
-}
-
-//debayer process
-XCamReturn
-AdebayerProcess
-(
-    AdebayerContext_t *pAdebayerCtx,
-    int ISO
-)
-{
-    LOGI_ADEBAYER("%s(%d): enter! ISO=%d\n", __FUNCTION__, __LINE__, ISO);
-
-    if(pAdebayerCtx == NULL) {
+    if(!pAdebayerCtx) {
         LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
         return XCAM_RETURN_ERROR_PARAM;
     }
 
-    pAdebayerCtx->config.enable = pAdebayerCtx->full_param.enable;
     for (int i = 0; i < 5; i++)
     {
         pAdebayerCtx->config.filter1_coe[i] = pAdebayerCtx->full_param.filter1[i];
@@ -299,24 +231,8 @@ AdebayerProcess
     pAdebayerCtx->config.thed0 = pAdebayerCtx->full_param.thed0;
     pAdebayerCtx->config.thed1 = pAdebayerCtx->full_param.thed1;
     pAdebayerCtx->config.dist_scale = pAdebayerCtx->full_param.dist_scale;
-
-    unsigned char false_color_remove_strength_table[10][2] = {
-        {0, 19},
-        {1, 18},
-        {2, 17},
-        {3, 16},
-        {4, 15},
-        {5, 14},
-        {6, 13},
-        {7, 12},
-        {8, 11},
-        {9, 10}
-    };
-
-    int index = pAdebayerCtx->full_param.cnr_strength;
-    pAdebayerCtx->config.order_min = false_color_remove_strength_table[index][0];
-    pAdebayerCtx->config.order_max = false_color_remove_strength_table[index][1];
     pAdebayerCtx->config.shift_num = pAdebayerCtx->full_param.shift_num;
+
     //select sharp params
     int iso_low = ISO, iso_high = ISO;
     int gain_high, gain_low;
@@ -351,7 +267,219 @@ AdebayerProcess
     pAdebayerCtx->config.max_ratio = ((ratio) * (sharp_strength_tmp[gain_high] - sharp_strength_tmp[gain_low]) + sharp_strength_tmp[gain_low]);
     pAdebayerCtx->config.hf_offset = ((ratio) * (hfOffset_tmp[gain_high] - hfOffset_tmp[gain_low]) + hfOffset_tmp[gain_low]);
 
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+XCamReturn
+AdebayerTranslateParams(AdebayerContext_t *pAdebayerCtx, int8_t ISO)
+{
+    if(!pAdebayerCtx) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+
+    pAdebayerCtx->config.enable = pAdebayerCtx->full_param.enable;
+
+    unsigned char false_color_remove_strength_table[10][2] = {
+        {0, 19},
+        {1, 18},
+        {2, 17},
+        {3, 16},
+        {4, 15},
+        {5, 14},
+        {6, 13},
+        {7, 12},
+        {8, 11},
+        {9, 10}
+    };
+
+    int index = 0;
+    if (pAdebayerCtx->mode == RK_AIQ_DEBAYER_MODE_AUTO) {
+        index = pAdebayerCtx->full_param.cnr_strength;
+        ret = AdebayerTranslateParamsAtAutoMode(pAdebayerCtx, ISO);
+    } else if  (pAdebayerCtx->mode == RK_AIQ_DEBAYER_MODE_MANUAL) {
+        index = pAdebayerCtx->manualAttrib.cnr_strength;
+        ret = AdebayerTranslateParamsAtManualMode(pAdebayerCtx);
+    } else {
+        LOGE_ADEBAYER("Invalid mode: %d\n", pAdebayerCtx->mode);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+
+    if (ret != XCAM_RETURN_NO_ERROR)
+        LOGE_ADEBAYER("Failed to translate debayer Params in %s mode\n",
+                      pAdebayerCtx->mode == RK_AIQ_DEBAYER_MODE_AUTO ? "auto" : "manual");
+
+    pAdebayerCtx->config.order_min = false_color_remove_strength_table[index][0];
+    pAdebayerCtx->config.order_max = false_color_remove_strength_table[index][1];
+
+    LOGI_ADEBAYER("debayer %s mode: config filter1: %d, %d, %d, %d, %d, filter2: %d, %d, %d, %d, %d\n",
+                  pAdebayerCtx->mode == RK_AIQ_DEBAYER_MODE_AUTO ? "auto" : "manual",
+                  pAdebayerCtx->config.filter1_coe[0], pAdebayerCtx->config.filter1_coe[1],
+                  pAdebayerCtx->config.filter1_coe[2], pAdebayerCtx->config.filter1_coe[3],
+                  pAdebayerCtx->config.filter1_coe[4], pAdebayerCtx->config.filter2_coe[0],
+                  pAdebayerCtx->config.filter2_coe[1], pAdebayerCtx->config.filter2_coe[2],
+                  pAdebayerCtx->config.filter2_coe[3], pAdebayerCtx->config.filter2_coe[4]);
+
+    LOGI_ADEBAYER("debayer config gain_offset: %d, offset: %d, clip_en: %d, filter_g_en: %d, filter_c_en: %d, " \
+                  "thed0: %d, thed1: %d, dist_scale: %d, shift_num: %d, max_ratio: %d, hf_offset: %d, order_max: %d, order_min: %d\n",
+                  pAdebayerCtx->config.gain_offset, pAdebayerCtx->config.offset, pAdebayerCtx->config.clip_en,
+                  pAdebayerCtx->config.filter_g_en, pAdebayerCtx->config.filter_c_en,
+                  pAdebayerCtx->config.thed0, pAdebayerCtx->config.thed1, pAdebayerCtx->config.dist_scale,
+                  pAdebayerCtx->config.shift_num, pAdebayerCtx->config.max_ratio, pAdebayerCtx->config.hf_offset,
+                  pAdebayerCtx->config.order_max, pAdebayerCtx->config.order_min);
+
+    return ret;
+}
+
+//debayer inint
+XCamReturn
+AdebayerInit
+(
+    AdebayerContext_t *pAdebayerCtx,
+    CamCalibDbContext_t *pCalibDb,
+    CamCalibDbV2Context_t *pCalibDbV2
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+    if(pAdebayerCtx == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+    memset(&pAdebayerCtx->config, 0, sizeof(pAdebayerCtx->config));
+    memset(&pAdebayerCtx->manualAttrib, 0, sizeof(pAdebayerCtx->manualAttrib));
+    pAdebayerCtx->pCalibDb = pCalibDb;
+    pAdebayerCtx->pCalibDbV2 = pCalibDbV2;
+    AdebayerFullParamsInit(pAdebayerCtx);
+    pAdebayerCtx->state = ADEBAYER_STATE_INITIALIZED;
+    pAdebayerCtx->mode = RK_AIQ_DEBAYER_MODE_AUTO;
+
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+//debayer release
+XCamReturn
+AdebayerRelease
+(
+    AdebayerContext_t *pAdebayerCtx
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+    if(pAdebayerCtx == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+    AdebayerStop(pAdebayerCtx);
+
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+//debayer config
+XCamReturn
+AdebayerConfig
+(
+    AdebayerContext_t *pAdebayerCtx,
+    AdebayerConfig_t* pAdebayerConfig
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+
+    if(pAdebayerCtx == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+
+    if(pAdebayerConfig == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+    //TO DO
+
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+XCamReturn
+AdebayerStart
+(
+    AdebayerContext_t *pAdebayerCtx
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+
+    if(pAdebayerCtx == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+
+    pAdebayerCtx->state = ADEBAYER_STATE_RUNNING;
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+XCamReturn
+AdebayerStop
+(
+    AdebayerContext_t *pAdebayerCtx
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+
+    if(pAdebayerCtx == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+    pAdebayerCtx->state = ADEBAYER_STATE_STOPPED;
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+//debayer reconfig
+XCamReturn
+AdebayerReConfig
+(
+    AdebayerContext_t* pAdebayerCtx,
+    AdebayerConfig_t*  pAdebayerConfig
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+    //need todo what?
+
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+//debayer preprocess
+XCamReturn AdebayerPreProcess(AdebayerContext_t *pAdebayerCtx)
+{
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+    //need todo what?
+
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    return XCAM_RETURN_NO_ERROR;
+}
+
+//debayer process
+XCamReturn
+AdebayerProcess
+(
+    AdebayerContext_t *pAdebayerCtx,
+    int ISO
+)
+{
+    LOGV_ADEBAYER("%s(%d): enter! ISO=%d\n", __FUNCTION__, __LINE__, ISO);
+
+    if(pAdebayerCtx == NULL) {
+        LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
+        return XCAM_RETURN_ERROR_PARAM;
+    }
+
+    AdebayerTranslateParams(pAdebayerCtx, ISO);
+
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
     return XCAM_RETURN_NO_ERROR;
 
 }
@@ -364,7 +492,7 @@ AdebayerGetProcResult
     AdebayerProcResult_t* pAdebayerResult
 )
 {
-    LOGI_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
+    LOGV_ADEBAYER("%s(%d): enter!\n", __FUNCTION__, __LINE__);
 
     if(pAdebayerCtx == NULL) {
         LOGE_ADEBAYER("%s(%d): null pointer\n", __FUNCTION__, __LINE__);
@@ -377,8 +505,8 @@ AdebayerGetProcResult
     }
 
     pAdebayerResult->config = pAdebayerCtx->config;
-
-    LOGI_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
+    pAdebayerCtx->config.updatecfg = false;
+    LOGV_ADEBAYER("%s(%d): exit!\n", __FUNCTION__, __LINE__);
     return XCAM_RETURN_NO_ERROR;
 }
 

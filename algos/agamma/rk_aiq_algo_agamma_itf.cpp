@@ -17,9 +17,10 @@
  *
  */
 
-#include "rk_aiq_algo_types_int.h"
 #include "agamma/rk_aiq_algo_agamma_itf.h"
 #include "agamma/rk_aiq_agamma_algo.h"
+#include "rk_aiq_algo_types.h"
+
 RKAIQ_BEGIN_DECLARE
 
 typedef struct _RkAiqAlgoContext {
@@ -31,70 +32,88 @@ typedef struct _RkAiqAlgoContext {
 static XCamReturn
 create_context(RkAiqAlgoContext **context, const AlgoCtxInstanceCfg* cfg)
 {
+    LOG1_AGAMMA("ENTER: %s \n", __func__);
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    AgammaHandle_t*AgammaHandle = NULL;
-    AlgoCtxInstanceCfgInt* instanc_int = (AlgoCtxInstanceCfgInt*)cfg;
-    CamCalibDbContext_t* calib = instanc_int->calib;
-    ret = AgammaInit(&AgammaHandle, calib);
-    *context = (RkAiqAlgoContext *)(AgammaHandle);
+    AgammaHandle_t* pAgammaHandle = NULL;
+
+    ret = AgammaInit(&pAgammaHandle, (CamCalibDbV2Context_t*)(cfg->calibv2));
+
+    *context = (RkAiqAlgoContext *)(pAgammaHandle);
+
+    LOG1_AGAMMA("EXIT: %s \n", __func__);
     return ret;
 }
 
 static XCamReturn
 destroy_context(RkAiqAlgoContext *context)
 {
-    AgammaHandle_t*AgammaHandle = (AgammaHandle_t*)context;
+    LOG1_AGAMMA("ENTER: %s \n", __func__);
+    AgammaHandle_t* pAgammaHandle = (AgammaHandle_t*)context;
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
 
-    ret = AgammaRelease(AgammaHandle);
+    ret = AgammaRelease(pAgammaHandle);
 
+    LOG1_AGAMMA("EXIT: %s \n", __func__);
     return ret;
 }
 
 static XCamReturn
 prepare(RkAiqAlgoCom* params)
 {
+    LOG1_AGAMMA("ENTER: %s \n", __func__);
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    AgammaHandle_t * AgammaHandle = (AgammaHandle_t *)params->ctx;
-    RkAiqAlgoConfigAgammaInt* pCfgParam = (RkAiqAlgoConfigAgammaInt*)params;
-    rk_aiq_gamma_cfg_t *agamma_config = &AgammaHandle->agamma_config;
+    AgammaHandle_t * pAgammaHandle = (AgammaHandle_t *)params->ctx;
+    RkAiqAlgoConfigAgamma* pCfgParam = (RkAiqAlgoConfigAgamma*)params;
+    rk_aiq_gamma_cfg_t *agamma_config = &pAgammaHandle->agamma_config;
+    pAgammaHandle->working_mode = pCfgParam->com.u.prepare.working_mode;
+    pAgammaHandle->prepare_type = pCfgParam->com.u.prepare.conf_type;
 
-    AgammaHandle->working_mode = pCfgParam->agamma_config_com.com.u.prepare.working_mode;
+    if(!!(pAgammaHandle->prepare_type & RK_AIQ_ALGO_CONFTYPE_UPDATECALIB )) {
 
+        if(CHECK_ISP_HW_V21()) {
+            CalibDbV2_gamma_t* calibv2_agamma_calib =
+                (CalibDbV2_gamma_t*)(CALIBDBV2_GET_MODULE_PTR((void*)(pCfgParam->com.u.prepare.calibv2), agamma_calib));
+            memcpy(&pAgammaHandle->CalibDb.Gamma_v20, calibv2_agamma_calib, sizeof(CalibDbV2_gamma_t));//reload iq
+        }
+        else if(CHECK_ISP_HW_V30()) {
+            CalibDbV2_gamma_V30_t* calibv2_agamma_calib =
+                (CalibDbV2_gamma_V30_t*)(CALIBDBV2_GET_MODULE_PTR((void*)(pCfgParam->com.u.prepare.calibv2), agamma_calib));
+            memcpy(&pAgammaHandle->CalibDb.Gamma_v30, calibv2_agamma_calib, sizeof(CalibDbV2_gamma_V30_t));//reload iq
+        }
+        LOGI_AGAMMA("%s: Agamma Reload Para!!!\n", __FUNCTION__);
+    }
+
+    LOG1_AGAMMA("EXIT: %s \n", __func__);
     return ret;
 }
 
 static XCamReturn
 pre_process(const RkAiqAlgoCom* inparams, RkAiqAlgoResCom* outparams)
 {
-    RkAiqAlgoPreAgammaInt* pAgammaPreParams = (RkAiqAlgoPreAgammaInt*)inparams;
-    AgammaHandle_t * AgammaHandle = (AgammaHandle_t *)inparams->ctx;
-    rk_aiq_gamma_cfg_t *agamma_config = &AgammaHandle->agamma_config;
+    LOG1_AGAMMA("ENTER: %s \n", __func__);
+    RkAiqAlgoPreAgamma* pAgammaPreParams = (RkAiqAlgoPreAgamma*)inparams;
+    AgammaHandle_t* pAgammaHandle = (AgammaHandle_t *)inparams->ctx;
+    rk_aiq_gamma_cfg_t *agamma_config = &pAgammaHandle->agamma_config;
 
-    if (pAgammaPreParams->rk_com.u.proc.gray_mode)
-        AgammaHandle->Scene_mode = GAMMA_OUT_NIGHT;
-    else if (GAMMA_OUT_NORMAL == AgammaHandle->working_mode)
-        AgammaHandle->Scene_mode = GAMMA_OUT_NORMAL;
-    else
-        AgammaHandle->Scene_mode = GAMMA_OUT_HDR;
 
-    LOGD_AGAMMA(" %s: Gamma scene is:%d\n", __func__, AgammaHandle->Scene_mode);
-
+    LOG1_AGAMMA("EXIT: %s \n", __func__);
     return XCAM_RETURN_NO_ERROR;
 }
 
 static XCamReturn
 processing(const RkAiqAlgoCom* inparams, RkAiqAlgoResCom* outparams)
 {
+    LOG1_AGAMMA("ENTER: %s \n", __func__);
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    AgammaHandle_t * AgammaHandle = (AgammaHandle_t *)inparams->ctx;
-    RkAiqAlgoProcResAgamma* procResPara = (RkAiqAlgoProcResAgamma*)outparams;
-    AgammaProcRes_t* AgammaProcRes = (AgammaProcRes_t*)&procResPara->agamma_proc_res;
+    AgammaHandle_t* pAgammaHandle = (AgammaHandle_t *)inparams->ctx;
+    RkAiqAlgoProcResAgamma* pAgammaProcRes = (RkAiqAlgoProcResAgamma*)outparams;
+    AgammaProcRes_t* pProcRes = (AgammaProcRes_t*)&pAgammaProcRes->GammaProcRes;
 
-    AgammaProcessing(AgammaHandle);
+    AgammaProcessing(pAgammaHandle);
 
     //set proc res
-    AgammaSetProcRes(AgammaProcRes, &AgammaHandle->agamma_config);
+    AgammaSetProcRes(pProcRes, &pAgammaHandle->agamma_config);
+    LOG1_AGAMMA("EXIT: %s \n", __func__);
     return ret;
 }
 

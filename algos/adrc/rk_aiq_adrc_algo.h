@@ -16,23 +16,25 @@
 #include <stdlib.h>
 #include "ae/rk_aiq_types_ae_algo_int.h"
 #include "af/rk_aiq_af_hw_v200.h"
-//#include "rk_aiq_uapi_adrc_int.h"
 #include "rk_aiq_types_adrc_algo_prvt.h"
 
 
-XCamReturn AdrcStart(AdrcHandle_t pAdrcCtx);
-XCamReturn AdrcStop(AdrcHandle_t pAdrcCtx);
-void AdrcApiOffConfig(AdrcHandle_t pAdrcCtx);
-void AdrcConfig(AdrcHandle_t pAdrcCtx);
-void AdrcGetStats(AdrcHandle_t pAdrcCtx, rkisp_adrc_stats_t* ROData) ;
-void AdrcIQUpdate(AdrcHandle_t pAdrcCtx, AecPreResult_t AecHdrPreResult, af_preprocess_result_t AfPreResult);
-void AdrcGetSensorInfo( AdrcHandle_t pAdrcCtx, AecProcResult_t AecHdrProcResult);
-void AdrcSelectMode(AdrcHandle_t pAdrcCtx, CalibDb_Adrc_Para_t* pConfig, int mode);
-void AdrcUpdateConfig(AdrcHandle_t pAdrcCtx, AecPreResult_t AecHdrPreResult, af_preprocess_result_t AfPreResult);
-bool DrcSetGlobalTMO(AdrcHandle_t pAdrcCtx);
-XCamReturn AdrcInit(AdrcInstanceConfig_t* pInstConfig) ;
-XCamReturn AdrcRelease(AdrcHandle_t pAdrcCtx) ;
-void AdrcProcessing(AdrcHandle_t pAdrcCtx);
+XCamReturn AdrcStart(AdrcContext_t* pAdrcCtx);
+XCamReturn AdrcStop(AdrcContext_t* pAdrcCtx);
+void DrcProcApiMalloc(AdrcConfig_t* pConfig, drcAttr_t* pDrcAttr, DrcCalibDB_t* pCalibDb);
+void DrcPrepareJsonMalloc(AdrcConfig_t* pConfig, DrcCalibDB_t* pCalibDb);
+void AdrcProcUpdateConfig(AdrcContext_t* pAdrcCtx, DrcCalibDB_t* pCalibDb, drcAttr_t* pDrcAttr);
+void AdrcPrePareJsonUpdateConfig(AdrcContext_t* pAdrcCtx, DrcCalibDB_t* pCalibDb);
+void DrcEnableSetting(AdrcContext_t* pAdrcCtx);
+void AdrcApiOffConfig(AdrcContext_t* pAdrcCtx);
+void AdrcIQUpdate(AdrcContext_t* pAdrcCtx, AecPreResult_t AecHdrPreResult, af_preprocess_result_t AfPreResult);
+void AdrcGetSensorInfo( AdrcContext_t* pAdrcCtx, AecProcResult_t AecHdrProcResult);
+void AdrcTuningParaProcessing(AdrcContext_t* pAdrcCtx);
+void AdrcExpoParaProcessing(AdrcContext_t* pAdrcCtx, DrcExpoData_t* pExpoData);
+bool AdrcByPassProcessing(AdrcContext_t* pAdrcCtx, AecPreResult_t AecHdrPreResult);
+bool DrcSetGlobalTMO(AdrcContext_t* pAdrcCtx);
+XCamReturn AdrcInit(AdrcContext_t **ppAdrcCtx, CamCalibDbV2Context_t *pCalibDb) ;
+XCamReturn AdrcRelease(AdrcContext_t* pAdrcCtx) ;
 
 
 #endif

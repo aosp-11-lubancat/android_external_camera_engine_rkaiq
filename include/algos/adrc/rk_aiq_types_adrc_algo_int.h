@@ -12,83 +12,117 @@
 #define __RK_AIQ_TYPES_ADRC_ALGO_INT_H__
 
 #include "RkAiqCalibDbTypes.h"
+#include "adrc_head.h"
+#include "adrc_uapi_head.h"
 #include "rk_aiq_types_adrc_stat_v200.h"
 
+#define AIQ_ISP3X_DRC_Y_NUM 17
 
-enum {
-    ADRC_NORMAL = 0,
-    ADRC_HDR = 1,
-    ADRC_NIGHT = 2
-};
 
-typedef enum drc_OpMode_s {
-    DRC_OPMODE_API_OFF = 0, // run IQ ahdr
-    DRC_OPMODE_AUTO = 1, //run api auto ahdr
-    DRC_OPMODE_MANU= 2, //run api manual ahdr
-    DRC_OPMODE_SET_LEVEL = 3, // its prevously fast mode, run api set level
-    DRC_OPMODE_DARKAREA = 4, // for dark area luma inprove, no matter the scene is night, normal, or hdr
-    DRC_OPMODE_TOOL = 5, // for dark area luma inprove, no matter the scene is night, normal, or hdr
-} drc_OpMode_t;
-
-typedef CalibDb_Drc_ModeCell_t AdrcConfig_t;
-
-typedef struct adrcAttr_s
+typedef struct DrcProcResV21_s
 {
-    
-} adrcAttr_t;
+    int sw_drc_offset_pow2;
+    int sw_drc_compres_scl;
+    int sw_drc_position;
+    int sw_drc_delta_scalein;
+    int sw_drc_hpdetail_ratio;
+    int sw_drc_lpdetail_ratio;
+    int sw_drc_weicur_pix;
+    int sw_drc_weipre_frame;
+    int sw_drc_force_sgm_inv0;
+    int sw_drc_motion_scl;
+    int sw_drc_edge_scl;
+    int sw_drc_space_sgm_inv1;
+    int sw_drc_space_sgm_inv0;
+    int sw_drc_range_sgm_inv1;
+    int sw_drc_range_sgm_inv0;
+    int sw_drc_weig_maxl;
+    int sw_drc_weig_bilat;
+    int sw_drc_gain_y[ISP21_DRC_Y_NUM];
+    int sw_drc_compres_y[ISP21_DRC_Y_NUM];
+    int sw_drc_scale_y[ISP21_DRC_Y_NUM];
+    float sw_drc_adrc_gain;
+    int sw_drc_iir_weight;
+    int sw_drc_min_ogain;
+} DrcProcResV21_t;
 
-typedef struct mdrcAttr_s
-{
-    
-} mdrcAttr_t;
+typedef struct DrcProcResV30_s {
+    int bypass_en;
+    int offset_pow2;
+    int compres_scl;
+    int position;
+    int delta_scalein;
+    int hpdetail_ratio;
+    int lpdetail_ratio;
+    int weicur_pix;
+    int weipre_frame;
+    int bilat_wt_off;
+    int force_sgm_inv0;
+    int motion_scl;
+    int edge_scl;
+    int space_sgm_inv1;
+    int space_sgm_inv0;
+    int range_sgm_inv1;
+    int range_sgm_inv0;
+    int weig_maxl;
+    int weig_bilat;
+    int enable_soft_thd;
+    int bilat_soft_thd;
+    int gain_y[AIQ_ISP3X_DRC_Y_NUM];
+    int compres_y[AIQ_ISP3X_DRC_Y_NUM];
+    int scale_y[AIQ_ISP3X_DRC_Y_NUM];
+    float adrc_gain;
+    int wr_cycle;
+    int iir_weight;
+    int min_ogain;
+} DrcProcResV30_t;
 
-typedef struct drcAttr_s
-{
-    drc_OpMode_t    opMode;
-    adrcAttr_t    stAuto;
-    mdrcAttr_t stManual;
-    //CurrCtlData_t CtlInfo;
-    //CurrRegData_t RegInfo;
-    CalibDb_Adrc_Para_t stTool;
-} drcAttr_t;
-
-typedef struct DrcProcRes_s
-{
-	int sw_drc_offset_pow2;//
-	int sw_drc_compres_scl;//sys
-	int sw_drc_position;
-	int sw_drc_delta_scalein;//
-	int sw_drc_hpdetail_ratio;
-	int sw_drc_lpdetail_ratio;
-	int sw_drc_weicur_pix;//
-	int sw_drc_weipre_frame;//
-	int sw_drc_force_sgm_inv0;//
-	int sw_drc_motion_scl;//
-	int sw_drc_edge_scl;//
-	int sw_drc_space_sgm_inv1;//
-	int sw_drc_space_sgm_inv0;//
-	int sw_drc_range_sgm_inv1;//
-	int sw_drc_range_sgm_inv0;//
-	int sw_drc_weig_maxl;//
-	int sw_drc_weig_bilat;//
-	int sw_drc_gain_y[ISP21_DRC_Y_NUM];
-	int sw_drc_compres_y[ISP21_DRC_Y_NUM];//
-	int sw_drc_scale_y[ISP21_DRC_Y_NUM];//
-	int sw_drc_adrc_gain;
-	int sw_drc_iir_weight;//
-	int sw_drc_min_ogain;//
-
+typedef struct DrcProcRes_s {
+    union {
+        DrcProcResV21_t Drc_v21;
+        DrcProcResV30_t Drc_v30;
+    };
 } DrcProcRes_t;
 
 typedef struct RkAiqAdrcProcResult_s
 {
     DrcProcRes_t DrcProcRes;
-    drcAttr_t drcAttr;
+    CompressMode_t CompressMode;
+    bool update;
     bool LongFrameMode;
     bool isHdrGlobalTmo;
     bool bTmoEn;
     bool isLinearTmo;
 } RkAiqAdrcProcResult_t;
+
+
+typedef enum AdrcVersion_e {
+    ADRC_VERSION_356X = 0,
+    ADRC_VERSION_3588 = 1,
+    ADRC_VERSION_MAX
+} AdrcVersion_t;
+
+typedef enum drc_OpMode_s {
+    DRC_OPMODE_API_OFF = 0, // run IQ ahdr
+    DRC_OPMODE_MANU = 1,    // run api manual ahdr
+    DRC_OPMODE_DRC_GAIN = 2,
+    DRC_OPMODE_HILIT = 3,
+    DRC_OPMODE_LOCAL_TMO = 4,
+} drc_OpMode_t;
+
+typedef struct drcAttr_s {
+    rk_aiq_uapi_sync_t sync;
+
+    AdrcVersion_t Version;
+    drc_OpMode_t opMode;
+    mdrcAttr_V21_t stManualV21;
+    mdrcAttr_V30_t stManualV30;
+    mDrcGain_t stDrcGain;
+    mDrcHiLit_t stHiLit;
+    mLocalDataV21_t stLocalDataV21;
+    mLocalDataV30_t stLocalDataV30;
+    DrcInfo_t Info;
+} drcAttr_t;
 
 
 #endif

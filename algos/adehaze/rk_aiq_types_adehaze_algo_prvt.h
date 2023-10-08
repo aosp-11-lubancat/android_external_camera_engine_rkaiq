@@ -22,36 +22,78 @@
 
 #include "adehaze/rk_aiq_types_adehaze_algo_int.h"
 #include "RkAiqCalibDbTypes.h"
+#include "RkAiqCalibDbTypesV2.h"
 #include "rk_aiq_types_adehaze_stat.h"
-
 #include "rk_aiq_algo_types.h"
 #include "xcam_log.h"
+#include "amerge/rk_aiq_types_amerge_algo_prvt.h"
 
+#define ADHZ10BITMAX     (1023)
+#define ADHZ10BITMIN     (0)
+#define DEHAZE_API_MANUAL_DEFAULT_LEVEL     (50)
+#define DEHAZE_API_ENHANCE_MANUAL_DEFAULT_LEVEL     (50)
 
+//define for dehaze local gain
+#define YNR_BIT_CALIB (12)
+#define YNR_ISO_CURVE_POINT_BIT             (4)
+#define YNR_ISO_CURVE_SECT_VALUE   (1 << (YNR_BIT_CALIB - YNR_ISO_CURVE_POINT_BIT))
+#define YNR_ISO_CURVE_SECT_VALUE1   (1 << YNR_BIT_CALIB)
+#define YNR_CURVE_STEP             (16)
 
+typedef enum YnrSnrMode_e {
+    YNRSNRMODE_LSNR     = 0,
+    YNRSNRMODE_HSNR     = 1,
+} YnrSnrMode_t;
 
-#define LIMIT_VALUE(value,max_value,min_value)      (value > max_value? max_value : value < min_value ? min_value : value)
-#define DEHAZEBIGMODE     (2560)
-#define RK_DEHAZE_ISO_NUM 9
-#define FUNCTION_ENABLE 1
-#define FUNCTION_DISABLE 0
+typedef struct AdehazeAePreResV20_s {
+    float ISO;
+    dehaze_api_mode_t ApiMode;
+} AdehazeAePreResV20_t;
 
+typedef struct AdehazeAePreResV21_s {
+    float EnvLv;
+    float ISO;
+    YnrSnrMode_t SnrMode;
+    dehaze_api_mode_t ApiMode;
+} AdehazeAePreResV21_t;
+
+typedef struct AdehazeAePreRes_s {
+    union {
+        AdehazeAePreResV20_t V20;
+        AdehazeAePreResV21_t V21;
+        AdehazeAePreResV21_t V30;
+    };
+} AdehazeAePreRes_t;
+
+typedef struct CalibDbV2_dehaze_V30_prvt_s {
+    CalibDbDehazeV21_t DehazeTuningPara;
+    CalibDbV2_YnrV3_CalibPara_t  YnrCalibPara;
+} CalibDbV2_dehaze_V30_prvt_t;
+
+typedef struct CalibDbDehazePrvt_s {
+    union {
+        CalibDbV2_dehaze_V20_t Dehaze_v20;
+        CalibDbV2_dehaze_V21_t Dehaze_v21;
+        CalibDbV2_dehaze_V30_prvt_t Dehaze_v30;
+    };
+} CalibDbDehazePrvt_t;
 
 typedef struct AdehazeHandle_s {
-    CalibDb_Dehaze_t calib_dehaz;
-    CamCalibDbContext_t* pCalibDb;
-    adehaze_sw_t AdehazeAtrr;
+    adehaze_sw_V2_t AdehazeAtrr;
+    CalibDbDehazePrvt_t Calib;
     RkAiqAdehazeProcResult_t ProcRes;
     rkisp_adehaze_stats_t stats;
-    int HWversion; //0:isp2.0 1:isp2.1
+    AdehazeVersion_t HWversion;
+    AdehazeAePreRes_t CurrData;
+    AdehazeAePreRes_t PreData;
+    bool byPassProc;
+    bool is_multi_isp_mode;
     int width;
     int height;
     int strength;
     int working_mode;
-    int Dehaze_Scene_mode;
-    int FrameNumber;
+    FrameNumber_t FrameNumber;
+    int FrameID;
 } AdehazeHandle_t;
 
-
 #endif
-

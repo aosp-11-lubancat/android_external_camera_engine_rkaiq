@@ -24,28 +24,32 @@
 
 namespace RkCam {
 
-class Isp21Params : public Isp20Params {
+class Isp21Params : virtual public Isp20Params {
 public:
     explicit Isp21Params() : Isp20Params() {};
     virtual ~Isp21Params() {};
-
-    XCamReturn convertAiqResultsToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-            SmartPtr<RkAiqIspParamsProxy> aiq_results,
-            SmartPtr<RkAiqIspParamsProxy>& last_aiq_results);
+protected:
+    virtual bool convert3aResultsToIspCfg(SmartPtr<cam3aResult> &result, void* isp_cfg_p);
+    template<class T>
+    void convertAiqCcmToIsp21Params(T& isp_cfg,
+                                    const rk_aiq_ccm_cfg_t& ccm);
+    template<class T>
+    void convertAiqBlcToIsp21Params(T& isp_cfg,
+                                    rk_aiq_isp_blc_v21_t &blc);
+    template<class T>
+    void convertAiqAgicToIsp21Params(T& isp_cfg,
+                                     const rk_aiq_isp_gic_v21_t& gic_cfg);
+    template<class T>
+    void convertAiqAwbGainToIsp21Params(T& isp_cfg,
+                                        const rk_aiq_wb_gain_t& awb_gain, const rk_aiq_isp_blc_v21_t *blc,
+                                        bool awb_gain_update);
+    template<class T>
+    void convertAiqCsmToIsp21Params(T& isp_cfg,
+                                   const rk_aiq_acsm_params_t& csm_cfg);
 private:
     XCAM_DEAD_COPY(Isp21Params);
-    void convertAiqAwbGainToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-                                        const rk_aiq_wb_gain_t& awb_gain, SmartPtr<RkAiqIspParamsProxy> aiq_results, bool awb_gain_update);
-    void convertAiqBlcToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-                                    SmartPtr<RkAiqIspParamsProxy> aiq_results);
     void convertAiqAdehazeToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
                                         const rk_aiq_isp_dehaze_v21_t& dhaze);
-    void convertAiqCcmToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-                                    const rk_aiq_ccm_cfg_t& ccm);
-    void convertAiqTmoToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-                                    const rk_aiq_isp_drc_v21_t& drc_data);
-    void convertAiqGicToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-                                    const rk_aiq_isp_gic_v21_t& gic_cfg);
     void convertAiqAwbToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
                                     const rk_aiq_awb_stat_cfg_v201_t& awb_meas,
                                     bool awb_cfg_udpate);
@@ -61,8 +65,6 @@ private:
                                         rk_aiq_isp_sharp_v21_t& sharp);
     void convertAiqDrcToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
                                     rk_aiq_isp_drc_v21_t& adrc_data);
-    void convertAiqAgicToIsp21Params(struct isp21_isp_params_cfg& isp_cfg,
-                                     rk_aiq_isp_gic_v21_t& agic);
 };
 
 };

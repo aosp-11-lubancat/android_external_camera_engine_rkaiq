@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2019 Rockchip Corporation
+ * Copyright (c) 2019-2022 Rockchip Eletronics Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  *
  */
-
 #include "rk_aiq_user_api_afec.h"
-#include "RkAiqHandleInt.h"
+
+#include "algo_handlers/RkAiqAfecHandle.h"
 
 RKAIQ_BEGIN_DECLARE
 
@@ -27,7 +27,9 @@ RKAIQ_BEGIN_DECLARE
 XCamReturn
 rk_aiq_user_api_afec_SetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_fec_attrib_t attr)
 {
+    CHECK_USER_API_ENABLE2(sys_ctx);
     CHECK_USER_API_ENABLE(RK_AIQ_ALGO_TYPE_AFEC);
+    RKAIQ_API_SMART_LOCK(sys_ctx);
     RkAiqAfecHandleInt* algo_handle =
         algoHandle<RkAiqAfecHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_AFEC);
 
@@ -41,6 +43,7 @@ rk_aiq_user_api_afec_SetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_fec_attri
 XCamReturn
 rk_aiq_user_api_afec_GetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, rk_aiq_fec_attrib_t *attr)
 {
+    RKAIQ_API_SMART_LOCK(sys_ctx);
     RkAiqAfecHandleInt* algo_handle =
         algoHandle<RkAiqAfecHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_AFEC);
 

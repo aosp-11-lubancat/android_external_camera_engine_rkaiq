@@ -34,7 +34,17 @@ RKAIQ_BEGIN_DECLARE
 
 static bool isHDRmode(const rk_aiq_sys_ctx_t* ctx)
 {
-    int mode = ctx->_analyzer->mAlogsSharedParams.working_mode;
+    RKAIQ_API_SMART_LOCK(ctx);
+    int mode = RK_AIQ_WORKING_MODE_NORMAL;
+    if (ctx->cam_type == RK_AIQ_CAM_TYPE_GROUP) {
+#ifdef RKAIQ_ENABLE_CAMGROUP
+        const rk_aiq_camgroup_ctx_t* camgroup_ctx = (rk_aiq_camgroup_ctx_t *)ctx;
+        mode = camgroup_ctx->cam_ctxs_array[0]->_analyzer->mAlogsComSharedParams.working_mode;
+#endif
+    } else {
+        mode = ctx->_analyzer->mAlogsComSharedParams.working_mode;
+    }
+
     if (RK_AIQ_WORKING_MODE_NORMAL == mode)
         return false;
     else
@@ -43,8 +53,19 @@ static bool isHDRmode(const rk_aiq_sys_ctx_t* ctx)
 
 static int getHDRFrameNum(const rk_aiq_sys_ctx_t* ctx)
 {
-    int FrameNum = 1;
-    switch (ctx->_analyzer->mAlogsSharedParams.working_mode)
+    RKAIQ_API_SMART_LOCK(ctx);
+    int FrameNum = 1, working_mode = RK_AIQ_WORKING_MODE_NORMAL;
+
+    if (ctx->cam_type == RK_AIQ_CAM_TYPE_GROUP) {
+#ifdef RKAIQ_ENABLE_CAMGROUP
+        const rk_aiq_camgroup_ctx_t* camgroup_ctx = (rk_aiq_camgroup_ctx_t *)ctx;
+        working_mode = camgroup_ctx->cam_ctxs_array[0]->_analyzer->mAlogsComSharedParams.working_mode;
+#endif
+    } else {
+        working_mode = ctx->_analyzer->mAlogsComSharedParams.working_mode;
+    }
+
+    switch (working_mode)
     {
     case RK_AIQ_WORKING_MODE_NORMAL:
         FrameNum = 1;
@@ -63,6 +84,12 @@ static int getHDRFrameNum(const rk_aiq_sys_ctx_t* ctx)
     }
     return FrameNum;
 }
+
+/*
+**********************************************************
+*                        API of AEC module of V1
+**********************************************************
+*/
 
 /*
 *****************************
@@ -107,6 +134,27 @@ XCamReturn rk_aiq_uapi_setExpMode(const rk_aiq_sys_ctx_t* ctx, opMode_t mode)
     return (ret);
 }
 
+XCamReturn rk_aiq_uapi_getExpMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    Uapi_ExpSwAttr_t expSwAttr;
+    IMGPROC_FUNC_ENTER
+    if ((ctx == NULL) || (mode == NULL)) {
+        ret = XCAM_RETURN_ERROR_PARAM;
+        RKAIQ_IMGPROC_CHECK_RET(ret, "param invalid!");
+    }
+
+    ret = rk_aiq_user_api_ae_getExpSwAttr(ctx, &expSwAttr);
+    RKAIQ_IMGPROC_CHECK_RET(ret, "getExpMode failed in getExpSwAttr!");
+    if (expSwAttr.AecOpType == RK_AIQ_OP_MODE_AUTO) {
+        *mode = OP_AUTO;
+    } else if (expSwAttr.AecOpType == RK_AIQ_OP_MODE_MANUAL) {
+        *mode = OP_MANUAL;
+    }
+    IMGPROC_FUNC_EXIT
+    return (ret);
+}
+
 XCamReturn rk_aiq_uapi_setManualExp(const rk_aiq_sys_ctx_t* ctx, float gain, float time)
 {
     IMGPROC_FUNC_ENTER
@@ -145,57 +193,13 @@ XCamReturn rk_aiq_uapi_setManualExp(const rk_aiq_sys_ctx_t* ctx, float gain, flo
     return (ret);
 }
 
-XCamReturn rk_aiq_uapi_getExpMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    Uapi_ExpSwAttr_t expSwAttr;
-    IMGPROC_FUNC_ENTER
-    if ((ctx == NULL) || (mode == NULL)) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param invalid!");
-    }
-
-    ret = rk_aiq_user_api_ae_getExpSwAttr(ctx, &expSwAttr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "getExpMode failed in getExpSwAttr!");
-    if (expSwAttr.AecOpType == RK_AIQ_OP_MODE_AUTO) {
-        *mode = OP_AUTO;
-    } else if (expSwAttr.AecOpType == RK_AIQ_OP_MODE_MANUAL) {
-        *mode = OP_MANUAL;
-    }
-    IMGPROC_FUNC_EXIT
-    return (ret);
-}
-
-/*
-*****************************
-*
-* Desc: set auto exposure mode
-* Argument:
-*   mode:
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setAeMode(const rk_aiq_sys_ctx_t* ctx, aeMode_t mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getAeMode(const rk_aiq_sys_ctx_t* ctx, aeMode_t *mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    return ret;
-}
-
-
 /*
 *****************************
 *
 * Desc: set exposure parameter
 * Argument:
 *    auto exposure mode:
-*      exposure gain will be adjust between [gain->min, gain->max]；
-*    manual exposure mode:
+*      exposure gain will be adjust between [gain->min, gain->max]�?*    manual exposure mode:
 *      gain->min == gain->max
 *
 *****************************
@@ -230,7 +234,6 @@ XCamReturn rk_aiq_uapi_setExpGainRange(const rk_aiq_sys_ctx_t* ctx, paRange_t *g
         expSwAttr.stAuto.stLinAeRange.stGainRange.Max = gain->max;
         expSwAttr.stAuto.stLinAeRange.stGainRange.Min = gain->min;
     }
-
     ret = rk_aiq_user_api_ae_setExpSwAttr(ctx, expSwAttr);
     RKAIQ_IMGPROC_CHECK_RET(ret, "set exp attr failed!\nsetExpGainRange failed!");
     IMGPROC_FUNC_EXIT
@@ -268,8 +271,7 @@ XCamReturn rk_aiq_uapi_getExpGainRange(const rk_aiq_sys_ctx_t* ctx, paRange_t *g
 * Desc: set exposure parameter
 * Argument:
 *    auto exposure mode:
-*       exposure time will be adjust between [time->min, time->max]；
-*    manual exposure mode:
+*       exposure time will be adjust between [time->min, time->max]�?*    manual exposure mode:
 *       exposure time will be set gain->min == gain->max;
 *
 *****************************
@@ -335,11 +337,6 @@ XCamReturn rk_aiq_uapi_getExpTimeRange(const rk_aiq_sys_ctx_t* ctx, paRange_t *t
 }
 
 /*
-**********************************************************
-* Auto exposure advanced features
-**********************************************************
-*/
-/*
 *****************************
 *
 * Desc: backlight compensation
@@ -353,7 +350,9 @@ XCamReturn rk_aiq_uapi_getExpTimeRange(const rk_aiq_sys_ctx_t* ctx, paRange_t *t
 XCamReturn rk_aiq_uapi_setBLCMode(const rk_aiq_sys_ctx_t* ctx, bool on, aeMeasAreaType_t areaType)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
+
     Uapi_LinExpAttr_t lineExpAttr;
+    memset(&lineExpAttr, 0x00, sizeof(Uapi_LinExpAttr_t));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -363,6 +362,7 @@ XCamReturn rk_aiq_uapi_setBLCMode(const rk_aiq_sys_ctx_t* ctx, bool on, aeMeasAr
         ret = XCAM_RETURN_ERROR_FAILED;
         RKAIQ_IMGPROC_CHECK_RET(ret, "Not support in HDR mode!");
     }
+
     ret = rk_aiq_user_api_ae_getLinExpAttr(ctx, &lineExpAttr);
     RKAIQ_IMGPROC_CHECK_RET(ret, "getLinExpAttr error!");
     lineExpAttr.BackLightConf.enable = on ? 1 : 0;
@@ -386,6 +386,8 @@ XCamReturn rk_aiq_uapi_setBLCStrength(const rk_aiq_sys_ctx_t* ctx, int strength)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     Uapi_LinExpAttr_t lineExpAttr;
+    memset(&lineExpAttr, 0x00, sizeof(Uapi_LinExpAttr_t));
+
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -421,6 +423,7 @@ XCamReturn rk_aiq_uapi_setHLCMode(const rk_aiq_sys_ctx_t* ctx, bool on)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     Uapi_LinExpAttr_t linExpAttr;
+    memset(&linExpAttr, 0x00, sizeof(Uapi_LinExpAttr_t));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -455,6 +458,7 @@ XCamReturn rk_aiq_uapi_setHLCStrength(const rk_aiq_sys_ctx_t* ctx, int strength)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     Uapi_LinExpAttr_t lineExpAttr;
+    memset(&lineExpAttr, 0x00, sizeof(Uapi_LinExpAttr_t));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -481,79 +485,12 @@ XCamReturn rk_aiq_uapi_setHLCStrength(const rk_aiq_sys_ctx_t* ctx, int strength)
 /*
 *****************************
 *
-* Desc: set lowlight exposure mode
+* Desc: set anti-flicker mode
 * Argument:
-*    mode:
-*       auto: auto lowlight mode
-*       manual: manual lowlight mode
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setLExpMode(const rk_aiq_sys_ctx_t* ctx, opMode_t mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param error!");
-    }
-    Uapi_LinExpAttr_t linExpAttr;
-    ret = rk_aiq_user_api_ae_getLinExpAttr(ctx, &linExpAttr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "setLExpMode failed!");
-    if (mode == OP_MANUAL) {
-        linExpAttr.StrategyMode = RKAIQ_AEC_STRATEGY_MODE_LOWLIGHT_PRIOR;
-    } else if (mode == OP_AUTO) {
-        linExpAttr.StrategyMode = RKAIQ_AEC_STRATEGY_MODE_AUTO;
-    } else {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "mode is invalid!");
-    }
-    ret = rk_aiq_user_api_ae_setLinExpAttr(ctx, linExpAttr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "setLExpMode failed!");
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getLExpMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    IMGPROC_FUNC_ENTER
-    if ((ctx == NULL) || (mode == NULL)) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param error!");
-    }
-    Uapi_LinExpAttr_t linExpAttr;
-    ret = rk_aiq_user_api_ae_getLinExpAttr(ctx, &linExpAttr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "getLExpMode failed!");
-    if (linExpAttr.StrategyMode == RKAIQ_AEC_STRATEGY_MODE_LOWLIGHT_PRIOR)
-        *mode = OP_MANUAL;
-    else if (linExpAttr.StrategyMode == RKAIQ_AEC_STRATEGY_MODE_AUTO)
-        *mode = OP_AUTO;
-    IMGPROC_FUNC_EXIT
-    return ret;
-
-}
-
-
-/*
-*****************************
+*    mode
 *
-* Desc: set manual lowlight exposure time ratio
-* Argument:
-*    ratio:  [1.0, 128.0]
-* Not support
 *****************************
 */
-XCamReturn rk_aiq_uapi_setMLExp(const rk_aiq_sys_ctx_t* ctx, unsigned int ratio)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getMLExp(const rk_aiq_sys_ctx_t* ctx, unsigned int *ratio)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    return ret;
-}
 
 XCamReturn rk_aiq_uapi_setAntiFlickerMode(const rk_aiq_sys_ctx_t* ctx, antiFlickerMode_t mode)
 {
@@ -625,15 +562,12 @@ XCamReturn rk_aiq_uapi_setExpPwrLineFreqMode(const rk_aiq_sys_ctx_t* ctx, expPwr
     RKAIQ_IMGPROC_CHECK_RET(ret, "get exp attr failed!\nsetExpPwrLineFreqMode failed!");
     if (freq == EXP_PWR_LINE_FREQ_50HZ) {
         expSwAttr.stAntiFlicker.enable = true;
-        //expSwAttr.stAntiFlicker.Mode = AEC_ANTIFLICKER_AUTO_MODE;
         expSwAttr.stAntiFlicker.Frequency = AEC_FLICKER_FREQUENCY_50HZ;
     } else if (freq == EXP_PWR_LINE_FREQ_60HZ) {
         expSwAttr.stAntiFlicker.enable = true;
-        //expSwAttr.stAntiFlicker.Mode = AEC_ANTIFLICKER_AUTO_MODE;
         expSwAttr.stAntiFlicker.Frequency = AEC_FLICKER_FREQUENCY_60HZ;
     } else if (freq == EXP_PWR_LINE_FREQ_DIS) {
         expSwAttr.stAntiFlicker.enable = true;
-        //expSwAttr.stAntiFlicker.Mode = AEC_ANTIFLICKER_AUTO_MODE;
         expSwAttr.stAntiFlicker.Frequency = AEC_FLICKER_FREQUENCY_OFF;
     } else {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -671,124 +605,6 @@ XCamReturn rk_aiq_uapi_getExpPwrLineFreqMode(const rk_aiq_sys_ctx_t* ctx, expPwr
     return (ret);
 }
 
-
-
-/*
-*****************************
-*
-* Desc: set day night switch mode
-* Argument:
-*    mode
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setDayNSwMode(const rk_aiq_sys_ctx_t* ctx, opMode_t mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    Uapi_ExpSwAttr_t expSwAttr;
-    IMGPROC_FUNC_ENTER
-    if (mode == OP_AUTO) {
-        expSwAttr.DNTrigger = 1;
-        rk_aiq_user_api_ae_setExpSwAttr(ctx, expSwAttr);
-    } else if (mode == OP_MANUAL) {
-        expSwAttr.DNTrigger = 0;
-        expSwAttr.DNMode = AEC_DNMODE_DAY;
-        rk_aiq_user_api_ae_setExpSwAttr(ctx, expSwAttr);
-    }
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-
-XCamReturn rk_aiq_uapi_getDayNSwMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    Uapi_ExpSwAttr_t expSwAttr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param error!");
-    }
-
-    ret = rk_aiq_user_api_ae_getExpSwAttr(ctx, &expSwAttr);
-    if (expSwAttr.DNTrigger == 0)
-        *mode = OP_MANUAL;
-    else if (expSwAttr.DNTrigger == 1 || expSwAttr.DNTrigger == 2)
-        *mode = OP_AUTO;
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-/*
-*****************************
-*
-* Desc: set manual day night scene
-*    this function is active for DayNSw is manual mode
-* Argument:
-*    scene
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setMDNScene(const rk_aiq_sys_ctx_t* ctx, dayNightScene_t scene)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    Uapi_ExpSwAttr_t expSwAttr;
-    IMGPROC_FUNC_ENTER
-    if (scene < DAYNIGHT_SCENE_DAY || scene > DAYNIGHT_SCENE_NIGHT)
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param error!");
-    ret = rk_aiq_user_api_ae_getExpSwAttr(ctx, &expSwAttr);
-    if (expSwAttr.DNTrigger == 0) {
-        if (scene == DAYNIGHT_SCENE_DAY)
-            expSwAttr.DNMode = AEC_DNMODE_DAY;
-        else if(scene == DAYNIGHT_SCENE_NIGHT)
-            expSwAttr.DNMode = AEC_DNMODE_NIGHT;
-        rk_aiq_user_api_ae_setExpSwAttr(ctx, expSwAttr);
-    } else if (expSwAttr.DNTrigger == 1 || expSwAttr.DNTrigger == 2) {
-        RKAIQ_IMGPROC_CHECK_RET(ret, "mode error, auto mode now!");
-    }
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getMDNScene(const rk_aiq_sys_ctx_t* ctx, dayNightScene_t *scene)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    Uapi_ExpSwAttr_t expSwAttr;
-    IMGPROC_FUNC_ENTER
-    ret = rk_aiq_user_api_ae_getExpSwAttr(ctx, &expSwAttr);
-    if (expSwAttr.DNMode == AEC_DNMODE_DAY)
-        *scene = DAYNIGHT_SCENE_DAY;
-    else if(expSwAttr.DNMode == AEC_DNMODE_NIGHT)
-        *scene = DAYNIGHT_SCENE_NIGHT;
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-
-/*
-*****************************
-*
-* Desc: set auto day night switch sensitivity
-*    this function is active for DayNSw is auto mode
-* Argument:
-*    level: [1, 3]
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setADNSens(const rk_aiq_sys_ctx_t* ctx, unsigned int level)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getADNSens(const rk_aiq_sys_ctx_t* ctx, unsigned int *level)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-
-    return ret;
-}
-
 /*
 *****************************
 *
@@ -811,8 +627,6 @@ XCamReturn rk_aiq_uapi_getFLightMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode
 
     return ret;
 }
-
-
 
 /*
 *****************************
@@ -932,33 +746,6 @@ XCamReturn rk_aiq_uapi_unlockAWB(const rk_aiq_sys_ctx_t* ctx)
     IMGPROC_FUNC_EXIT
     return ret;
 }
-
-
-
-/*
-*****************************
-*
-* Desc: set auto white balance mode
-* Argument:
-*
-* Not support
-*****************************
-*/
-
-XCamReturn rk_aiq_uapi_setAWBRange(const rk_aiq_sys_ctx_t* ctx, awbRange_t range)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getAWBRange(const rk_aiq_sys_ctx_t* ctx, awbRange_t *range)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-
-    return ret;
-}
-
 
 /*
 *****************************
@@ -1217,7 +1004,7 @@ XCamReturn rk_aiq_uapi_getFocusMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
 *
 *****************************
 */
-XCamReturn rk_aiq_uapi_setFixedModeCode(const rk_aiq_sys_ctx_t* ctx, unsigned short code)
+XCamReturn rk_aiq_uapi_setFixedModeCode(const rk_aiq_sys_ctx_t* ctx, short code)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     rk_aiq_af_attrib_t attr;
@@ -1232,7 +1019,7 @@ XCamReturn rk_aiq_uapi_setFixedModeCode(const rk_aiq_sys_ctx_t* ctx, unsigned sh
     return ret;
 }
 
-XCamReturn rk_aiq_uapi_getFixedModeCode(const rk_aiq_sys_ctx_t* ctx, unsigned short *code)
+XCamReturn rk_aiq_uapi_getFixedModeCode(const rk_aiq_sys_ctx_t* ctx, short *code)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     rk_aiq_af_attrib_t attr;
@@ -1396,6 +1183,98 @@ XCamReturn rk_aiq_uapi_getSearchPath(const rk_aiq_sys_ctx_t* ctx, rk_aiq_af_sec_
     return ret;
 }
 
+XCamReturn rk_aiq_uapi_getSearchResult(const rk_aiq_sys_ctx_t* ctx, rk_aiq_af_result_t* result)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_GetSearchResult(ctx, result);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_setOpZoomPosition(const rk_aiq_sys_ctx_t* ctx, int pos)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_SetZoomIndex(ctx, pos);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_getOpZoomPosition(const rk_aiq_sys_ctx_t* ctx, int *pos)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_GetZoomIndex(ctx, pos);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_endOpZoomChange(const rk_aiq_sys_ctx_t* ctx)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_EndZoomChg(ctx);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_getZoomRange(const rk_aiq_sys_ctx_t* ctx, rk_aiq_af_zoomrange * range)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_GetZoomRange(ctx, range);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_getFocusRange(const rk_aiq_sys_ctx_t* ctx, rk_aiq_af_focusrange* range)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_GetFocusRange(ctx, range);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_startZoomCalib(const rk_aiq_sys_ctx_t* ctx)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_StartZoomCalib(ctx);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_resetZoom(const rk_aiq_sys_ctx_t* ctx)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_resetZoom(ctx);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_setAngleZ(const rk_aiq_sys_ctx_t* ctx, float angleZ)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    ret = rk_aiq_user_api_af_setAngleZ(ctx, angleZ);
+    IMGPROC_FUNC_EXIT
+
+    return ret;
+}
+
 /*
 *****************************
 *
@@ -1465,230 +1344,6 @@ XCamReturn rk_aiq_uapi_getOpZoomSpeed(const rk_aiq_sys_ctx_t* ctx, unsigned int 
 }
 
 /*
-*****************************
-*
-* Desc: set optical zoom position
-* Argument:
-*   pos:  [1, 2000]
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setOpZoomPosition(const rk_aiq_sys_ctx_t* ctx, int pos)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    IMGPROC_FUNC_ENTER
-    ret = rk_aiq_user_api_af_SetZoomPos(ctx, pos);
-    IMGPROC_FUNC_EXIT
-
-    return ret;
-}
-
-XCamReturn rk_aiq_uapi_getOpZoomPosition(const rk_aiq_sys_ctx_t* ctx, int *pos)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    IMGPROC_FUNC_ENTER
-    ret = rk_aiq_user_api_af_GetZoomPos(ctx, pos);
-    IMGPROC_FUNC_EXIT
-
-    return ret;
-}
-
-/*
-**********************************************************
-* HDR
-**********************************************************
-*/
-/*
-*****************************
-*
-* Desc: set hdr mode
-* Argument:
-*   mode:
-*     auto: auto hdr mode
-*     manual：manual hdr mode
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setHDRMode(const rk_aiq_sys_ctx_t* ctx, opMode_t mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    ahdr_attrib_t attr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param error, setHDRMode failed!");
-    }
-    if (!isHDRmode(ctx)) {
-        ret = XCAM_RETURN_ERROR_FAILED;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "not in HDR mode!");
-    }
-    ret = rk_aiq_user_api_ahdr_GetAttrib(ctx, &attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "get hdr attr failed!");
-    if (mode == OP_AUTO) {
-        attr.opMode = HDR_OpMode_Auto;
-    } else if (mode == OP_MANUAL) {
-        attr.opMode = HDR_OpMode_MANU;
-    } else {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "Not supported mode!");
-    }
-    IMGPROC_FUNC_EXIT
-    return rk_aiq_user_api_ahdr_SetAttrib(ctx, attr);
-}
-
-XCamReturn rk_aiq_uapi_getHDRMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    ahdr_attrib_t attr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "param error, getHDRMode failed!");
-    }
-    if (!isHDRmode(ctx)) {
-        ret = XCAM_RETURN_ERROR_FAILED;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "not in HDR mode!");
-    }
-    ret = rk_aiq_user_api_ahdr_GetAttrib(ctx, &attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "getHDRMOde failed in get attrib!");
-
-    if (attr.opMode == HDR_OpMode_Auto)
-        *mode =  OP_AUTO;
-    else if (attr.opMode == HDR_OpMode_MANU)
-        *mode = OP_MANUAL;
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-/*
-*****************************
-*
-* Desc: set manual hdr strength
-*    this function is active for HDR is manual mode
-* Argument:
-*   level: [1, 100]
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setMHDRStrth(const rk_aiq_sys_ctx_t* ctx, bool on, unsigned int level)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    ahdr_attrib_t attr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, setMHDRStrth failed!");
-    }
-
-    if (!isHDRmode(ctx)) {
-        ret = XCAM_RETURN_ERROR_FAILED;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "not in HDR mode!");
-    }
-    if (level < 1 || level > 100) {
-        ret = XCAM_RETURN_ERROR_OUTOFRANGE;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "level(%d) is out of range, setMHDRStrth failed!");
-    }
-
-    attr.stSetLevel.level = level;
-    attr.opMode = HDR_OpMode_SET_LEVEL;
-    ret = rk_aiq_user_api_ahdr_SetAttrib(ctx, attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "setMHDRStrth failed!");
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-
-XCamReturn rk_aiq_uapi_getMHDRStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, unsigned int *level)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    ahdr_attrib_t attr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, getMHDRStrth failed!");
-    }
-    if (!isHDRmode(ctx)) {
-        ret = XCAM_RETURN_ERROR_FAILED;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "not in HDR mode!");
-    }
-    ret = rk_aiq_user_api_ahdr_GetAttrib(ctx, &attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "getMHDRStrth failed in get attrib!");
-
-    *level = attr.stSetLevel.level;
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-/*
-*****************************
-*
-* Desc: set dark area boost strength
-*    this function is active for normal mode
-* Argument:
-*   level: [1, 10]
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_getDarkAreaBoostStrth(const rk_aiq_sys_ctx_t* ctx, unsigned int *level)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    ahdr_attrib_t attr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, getDarkAreaBoostStrth failed!");
-    }
-    if (isHDRmode(ctx)) {
-        ret = XCAM_RETURN_ERROR_FAILED;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "Not valid in HDR mode!");
-    }
-    ret = rk_aiq_user_api_ahdr_GetAttrib(ctx, &attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "getDarkAreaBoostStrth failed!");
-    if (attr.opMode == HDR_OpMode_DarkArea)
-        *level = attr.stDarkArea.level;
-    else
-        *level = 0;
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-/*
-*****************************
-*
-* Desc: get dark area boost strength
-*    this function is active for normal mode
-* Argument:
-*   level: [1, 10]
-*
-*****************************
-*/
-XCamReturn rk_aiq_uapi_setDarkAreaBoostStrth(const rk_aiq_sys_ctx_t* ctx, unsigned int level)
-{
-    XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    ahdr_attrib_t attr;
-    IMGPROC_FUNC_ENTER
-    if (ctx == NULL) {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, setMHDRStrth failed!");
-    }
-
-    if (isHDRmode(ctx)) {
-        ret = XCAM_RETURN_ERROR_FAILED;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "Not valid in HDR mode!");
-    }
-    if (level > 10) {
-        ret = XCAM_RETURN_ERROR_OUTOFRANGE;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "level(%d) is out of range, setDarkAreaBoostStrth failed!");
-    }
-    attr.stDarkArea.level = level;
-    attr.opMode = HDR_OpMode_DarkArea;
-    ret = rk_aiq_user_api_ahdr_SetAttrib(ctx, attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "setDarkAreaBoostStrth failed!");
-    IMGPROC_FUNC_EXIT
-    return ret;
-}
-
-/*
 **********************************************************
 * Noise reduction
 **********************************************************
@@ -1707,38 +1362,183 @@ XCamReturn rk_aiq_uapi_setDarkAreaBoostStrth(const rk_aiq_sys_ctx_t* ctx, unsign
 XCamReturn rk_aiq_uapi_setNRMode(const rk_aiq_sys_ctx_t* ctx, opMode_t mode)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    rk_aiq_nr_attrib_t attr;
+
     IMGPROC_FUNC_ENTER
-    ret = rk_aiq_user_api_anr_GetAttrib(ctx, &attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
-    if (mode == OP_AUTO) {
-        attr.eMode = ANR_OP_MODE_AUTO;
-    } else if (mode == OP_MANUAL) {
-        attr.eMode = ANR_OP_MODE_MANUAL;
-    } else {
-        ret = XCAM_RETURN_ERROR_PARAM;
-        RKAIQ_IMGPROC_CHECK_RET(ret, "Not supported mode!");
+
+    if (CHECK_ISP_HW_V20()) {
+        rk_aiq_nr_attrib_t attr;
+        ret = rk_aiq_user_api_anr_GetAttrib(ctx, &attr);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
+        if (mode == OP_AUTO) {
+            attr.eMode = ANR_OP_MODE_AUTO;
+        } else if (mode == OP_MANUAL) {
+            attr.eMode = ANR_OP_MODE_MANUAL;
+        } else {
+            ret = XCAM_RETURN_ERROR_PARAM;
+            RKAIQ_IMGPROC_CHECK_RET(ret, "Not supported mode!");
+        }
+        ret = rk_aiq_user_api_anr_SetAttrib(ctx, &attr);
     }
-    ret = rk_aiq_user_api_anr_SetAttrib(ctx, &attr);
+
+    if (CHECK_ISP_HW_V21()) {
+        rk_aiq_ynr_attrib_v2_t ynrV2_attr;
+        rk_aiq_bayernr_attrib_v2_t bayernrV2_attr;
+        rk_aiq_cnr_attrib_v1_t cnrV1_attr;
+        ret = rk_aiq_user_api_aynrV2_GetAttrib(ctx, &ynrV2_attr);
+        ret = rk_aiq_user_api_abayernrV2_GetAttrib(ctx, &bayernrV2_attr);
+        ret = rk_aiq_user_api_acnrV1_GetAttrib(ctx, &cnrV1_attr);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
+        if (mode == OP_AUTO) {
+            bayernrV2_attr.eMode = ABAYERNR_OP_MODE_AUTO;
+            ynrV2_attr.eMode = AYNR_OP_MODE_AUTO;
+            cnrV1_attr.eMode = ACNR_OP_MODE_AUTO;
+        } else if (mode == OP_MANUAL) {
+            bayernrV2_attr.eMode = ABAYERNR_OP_MODE_MANUAL;
+            ynrV2_attr.eMode = AYNR_OP_MODE_MANUAL;
+            cnrV1_attr.eMode = ACNR_OP_MODE_MANUAL;
+        } else {
+            ret = XCAM_RETURN_ERROR_PARAM;
+            RKAIQ_IMGPROC_CHECK_RET(ret, "Not supported mode!");
+        }
+        ret = rk_aiq_user_api_aynrV2_SetAttrib(ctx, &ynrV2_attr);
+        ret = rk_aiq_user_api_abayernrV2_SetAttrib(ctx, &bayernrV2_attr);
+        ret = rk_aiq_user_api_acnrV1_SetAttrib(ctx, &cnrV1_attr);
+    }
+
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_ynr_attrib_v3_t ynrV3_attr;
+        ynrV3_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_cnr_attrib_v2_t cnrV2_attr;
+        cnrV2_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_bayer2dnr_attrib_v2_t bayer2dnrV2_attr;
+        bayer2dnrV2_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_bayertnr_attrib_v2_t bayertnrV2_attr;
+        bayertnrV2_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ret = rk_aiq_user_api_aynrV3_GetAttrib(ctx, &ynrV3_attr);
+        ret = rk_aiq_user_api_acnrV2_GetAttrib(ctx, &cnrV2_attr);
+        ret = rk_aiq_user_api_abayer2dnrV2_SetAttrib(ctx, &bayer2dnrV2_attr);
+        ret = rk_aiq_user_api_abayertnrV2_SetAttrib(ctx, &bayertnrV2_attr);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
+
+        if (mode == OP_AUTO) {
+            ynrV3_attr.eMode = AYNRV3_OP_MODE_AUTO;
+            cnrV2_attr.eMode = ACNRV2_OP_MODE_AUTO;
+            bayer2dnrV2_attr.eMode = ABAYER2DNR_OP_MODE_AUTO;
+            bayertnrV2_attr.eMode = ABAYERTNRV2_OP_MODE_AUTO;
+        } else if (mode == OP_MANUAL) {
+            ynrV3_attr.eMode = AYNRV3_OP_MODE_MANUAL;
+            cnrV2_attr.eMode = ACNRV2_OP_MODE_MANUAL;
+            bayer2dnrV2_attr.eMode = ABAYER2DNR_OP_MODE_MANUAL;
+            bayertnrV2_attr.eMode = ABAYERTNRV2_OP_MODE_MANUAL;
+        } else if(mode == OP_REG_MANUAL) {
+            ynrV3_attr.eMode = AYNRV3_OP_MODE_REG_MANUAL;
+            cnrV2_attr.eMode = ACNRV2_OP_MODE_REG_MANUAL;
+            bayer2dnrV2_attr.eMode = ABAYER2DNR_OP_MODE_REG_MANUAL;
+            bayertnrV2_attr.eMode = ABAYERTNRV2_OP_MODE_REG_MANUAL;
+        } else {
+            ret = XCAM_RETURN_ERROR_PARAM;
+            RKAIQ_IMGPROC_CHECK_RET(ret, "Not supported mode!");
+        }
+        ret = rk_aiq_user_api_aynrV3_SetAttrib(ctx, &ynrV3_attr);
+        ret = rk_aiq_user_api_acnrV2_SetAttrib(ctx, &cnrV2_attr);
+        ret = rk_aiq_user_api_abayer2dnrV2_SetAttrib(ctx, &bayer2dnrV2_attr);
+        ret = rk_aiq_user_api_abayertnrV2_SetAttrib(ctx, &bayertnrV2_attr);
+    }
     RKAIQ_IMGPROC_CHECK_RET(ret, "setNRMode failed!", ret);
     IMGPROC_FUNC_EXIT
+
     return ret;
 }
 
 XCamReturn rk_aiq_uapi_getNRMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
-    rk_aiq_nr_attrib_t attr;
     IMGPROC_FUNC_ENTER
-    ret = rk_aiq_user_api_anr_GetAttrib(ctx, &attr);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
-    if (attr.eMode == ANR_OP_MODE_AUTO) {
-        *mode = OP_AUTO;
-    } else if (attr.eMode == ANR_OP_MODE_MANUAL) {
-        *mode = OP_MANUAL;
-    } else if (attr.eMode == ANR_OP_MODE_INVALID) {
-        *mode = OP_INVAL;
+
+    if (CHECK_ISP_HW_V20()) {
+        rk_aiq_nr_attrib_t attr;
+        ret = rk_aiq_user_api_anr_GetAttrib(ctx, &attr);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
+        if (attr.eMode == ANR_OP_MODE_AUTO) {
+            *mode = OP_AUTO;
+        } else if (attr.eMode == ANR_OP_MODE_MANUAL) {
+            *mode = OP_MANUAL;
+        } else if (attr.eMode == ANR_OP_MODE_INVALID) {
+            *mode = OP_INVAL;
+        }
     }
+
+    if (CHECK_ISP_HW_V21()) {
+        rk_aiq_ynr_attrib_v2_t ynrV2_attr;
+        rk_aiq_bayernr_attrib_v2_t bayernrV2_attr;
+        rk_aiq_cnr_attrib_v1_t cnrV1_attr;
+        ret = rk_aiq_user_api_aynrV2_GetAttrib(ctx, &ynrV2_attr);
+        ret = rk_aiq_user_api_abayernrV2_GetAttrib(ctx, &bayernrV2_attr);
+        ret = rk_aiq_user_api_acnrV1_GetAttrib(ctx, &cnrV1_attr);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
+
+        if (bayernrV2_attr.eMode == ABAYERNR_OP_MODE_AUTO
+                && ynrV2_attr.eMode == AYNR_OP_MODE_AUTO
+                && cnrV1_attr.eMode == ACNR_OP_MODE_AUTO) {
+            *mode = OP_AUTO;
+        } else if (bayernrV2_attr.eMode == ABAYERNR_OP_MODE_MANUAL
+                   && ynrV2_attr.eMode == AYNR_OP_MODE_MANUAL
+                   && cnrV1_attr.eMode == ACNR_OP_MODE_MANUAL) {
+            *mode = OP_MANUAL;
+        } else if (bayernrV2_attr.eMode == ABAYERNR_OP_MODE_INVALID
+                   && ynrV2_attr.eMode == AYNR_OP_MODE_INVALID
+                   && cnrV1_attr.eMode == ACNR_OP_MODE_INVALID) {
+            *mode = OP_INVAL;
+        } else {
+            LOGE_ANR("bayernr.mode:%d  ynr.mode:%d cnr.mode:%d\n",
+                     bayernrV2_attr.eMode,
+                     ynrV2_attr.eMode,
+                     cnrV1_attr.eMode);
+        }
+
+    }
+
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_ynr_attrib_v3_t ynrV3_attr;
+        ynrV3_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_cnr_attrib_v2_t cnrV2_attr;
+        cnrV2_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_bayer2dnr_attrib_v2_t bayer2dnrV2_attr;
+        bayer2dnrV2_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_bayertnr_attrib_v2_t bayertnrV2_attr;
+        bayertnrV2_attr.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ret = rk_aiq_user_api_aynrV3_GetAttrib(ctx, &ynrV3_attr);
+        ret = rk_aiq_user_api_acnrV2_GetAttrib(ctx, &cnrV2_attr);
+        ret = rk_aiq_user_api_abayer2dnrV2_GetAttrib(ctx, &bayer2dnrV2_attr);
+        ret = rk_aiq_user_api_abayertnrV2_GetAttrib(ctx, &bayertnrV2_attr);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "get anr attrib failed!,ret=%d", ret);
+
+        if(ynrV3_attr.eMode == AYNRV3_OP_MODE_AUTO
+                && cnrV2_attr.eMode == ACNRV2_OP_MODE_AUTO
+                && bayer2dnrV2_attr.eMode == ABAYER2DNR_OP_MODE_AUTO
+                && bayertnrV2_attr.eMode == ABAYERTNRV2_OP_MODE_AUTO) {
+            *mode = OP_AUTO;
+        } else if(ynrV3_attr.eMode == AYNRV3_OP_MODE_MANUAL
+                  && cnrV2_attr.eMode == ACNRV2_OP_MODE_MANUAL
+                  && bayer2dnrV2_attr.eMode == ABAYER2DNR_OP_MODE_MANUAL
+                  && bayertnrV2_attr.eMode == ABAYERTNRV2_OP_MODE_MANUAL) {
+            *mode = OP_MANUAL;
+        } else if(ynrV3_attr.eMode == AYNRV3_OP_MODE_REG_MANUAL
+                  && cnrV2_attr.eMode == ACNRV2_OP_MODE_REG_MANUAL
+                  && bayer2dnrV2_attr.eMode == ABAYER2DNR_OP_MODE_REG_MANUAL
+                  && bayertnrV2_attr.eMode == ABAYERTNRV2_OP_MODE_REG_MANUAL) {
+            *mode = OP_REG_MANUAL;
+        } else {
+            LOGE_ANR("bayer2dnr.mode:%d bayertnr.mode:%d ynr.mode:%d cnr.mode:%d\n",
+                     bayer2dnrV2_attr.eMode,
+                     bayertnrV2_attr.eMode,
+                     ynrV3_attr.eMode,
+                     cnrV2_attr.eMode);
+        }
+    }
+
     IMGPROC_FUNC_EXIT
     return ret;
 }
@@ -1755,14 +1555,46 @@ XCamReturn rk_aiq_uapi_getNRMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
 XCamReturn rk_aiq_uapi_setANRStrth(const rk_aiq_sys_ctx_t* ctx, unsigned int level)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
+
     IMGPROC_FUNC_ENTER
+
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, setANRStrth failed!");
     }
-    ret = rk_aiq_user_api_anr_SetLumaSFStrength(ctx, level / 100.0);
-    ret = rk_aiq_user_api_anr_SetLumaTFStrength(ctx, level / 100.0);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "setANRStrth failed!", ret);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_anr_SetLumaSFStrength(ctx, level / 100.0);
+        ret = rk_aiq_user_api_anr_SetLumaTFStrength(ctx, level / 100.0);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "setANRStrth failed!", ret);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_aynrV2_SetStrength(ctx, level / 100.0);
+        ret = rk_aiq_user_api_abayernrV2_SetSFStrength(ctx, level / 100.0);
+        ret = rk_aiq_user_api_abayernrV2_SetTFStrength(ctx, level / 100.0);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "setANRStrth failed!", ret);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_uapi_sync_t sync;
+        sync.sync_mode =  RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_ynr_strength_v3_t ynrStrenght;
+        ynrStrenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ynrStrenght.strength_enable = true;
+        ynrStrenght.percent = level / 100.0;
+        ret = rk_aiq_user_api_aynrV3_SetStrength(ctx, &ynrStrenght);
+        rk_aiq_bayer2dnr_strength_v2_t bayer2dnrV2Strenght;
+        bayer2dnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        bayer2dnrV2Strenght.strength_enable = true;
+        bayer2dnrV2Strenght.percent = level / 100.0;
+        ret = rk_aiq_user_api_abayer2dnrV2_SetStrength(ctx, &bayer2dnrV2Strenght);
+        rk_aiq_bayertnr_strength_v2_t bayertnrV2Strenght;
+        bayertnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        bayertnrV2Strenght.strength_enable = true;
+        bayertnrV2Strenght.percent = level / 100.0;
+        ret = rk_aiq_user_api_abayertnrV2_SetStrength(ctx, &bayertnrV2Strenght);
+    }
     IMGPROC_FUNC_EXIT
     return ret;
 }
@@ -1771,14 +1603,35 @@ XCamReturn rk_aiq_uapi_getANRStrth(const rk_aiq_sys_ctx_t* ctx, unsigned int *le
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     float percent = 0.0f;
+
     IMGPROC_FUNC_ENTER
+
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, getANRStrth failed!");
     }
-    ret = rk_aiq_user_api_anr_GetLumaSFStrength(ctx, &percent);
-    RKAIQ_IMGPROC_CHECK_RET(ret, "getANRStrth failed!", ret);
-    *level = (unsigned int)(percent * 100);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_anr_GetLumaTFStrength(ctx, &percent);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "getANRStrth failed!", ret);
+        *level = (unsigned int)(percent * 100);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_abayernrV2_GetTFStrength(ctx, &percent);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "getANRStrth failed!", ret);
+        *level = (unsigned int)(percent * 100);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_bayertnr_strength_v2_t bayertnrV2Strenght;
+        bayertnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ret = rk_aiq_user_api_abayertnrV2_GetStrength(ctx, &bayertnrV2Strenght);
+        RKAIQ_IMGPROC_CHECK_RET(ret, "getANRStrth failed!", ret);
+        percent = bayertnrV2Strenght.percent;
+        *level = (unsigned int)(percent * 100);
+    }
+
     IMGPROC_FUNC_EXIT
     return ret;
 }
@@ -1802,7 +1655,30 @@ XCamReturn rk_aiq_uapi_setMSpaNRStrth(const rk_aiq_sys_ctx_t* ctx, bool on, unsi
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, setMSpaNRStrth failed!");
     }
-    ret = rk_aiq_user_api_anr_SetLumaSFStrength(ctx, level / 100.0);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_anr_SetLumaSFStrength(ctx, level / 100.0);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_abayernrV2_SetSFStrength(ctx, level / 100.0);
+        ret = rk_aiq_user_api_aynrV2_SetStrength(ctx, level / 100.0);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_uapi_sync_t sync;
+        sync.sync_mode =  RK_AIQ_UAPI_MODE_SYNC;
+        rk_aiq_ynr_strength_v3_t ynrStrenght;
+        ynrStrenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ynrStrenght.strength_enable = true;
+        ynrStrenght.percent = level / 100.0;
+        ret = rk_aiq_user_api_aynrV3_SetStrength(ctx, &ynrStrenght);
+        rk_aiq_bayer2dnr_strength_v2_t bayer2dnrV2Strenght;
+        bayer2dnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        bayer2dnrV2Strenght.strength_enable = true;
+        bayer2dnrV2Strenght.percent = level / 100.0;
+        ret = rk_aiq_user_api_abayer2dnrV2_SetStrength(ctx, &bayer2dnrV2Strenght);
+    }
     RKAIQ_IMGPROC_CHECK_RET(ret, "setMSpaNRStrth failed!", ret);
     IMGPROC_FUNC_EXIT
     return ret;
@@ -1827,7 +1703,22 @@ XCamReturn rk_aiq_uapi_getMSpaNRStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, uns
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, getMSpaNRStrth failed!");
     }
-    ret = rk_aiq_user_api_anr_GetLumaSFStrength(ctx, &percent);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_anr_GetLumaSFStrength(ctx, &percent);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_abayernrV2_GetSFStrength(ctx, &percent);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_bayer2dnr_strength_v2_t bayer2dnrV2Strenght;
+        bayer2dnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ret = rk_aiq_user_api_abayer2dnrV2_GetStrength(ctx, &bayer2dnrV2Strenght);
+        percent = bayer2dnrV2Strenght.percent;
+    }
+
     RKAIQ_IMGPROC_CHECK_RET(ret, "getMSpaNRStrth failed!", ret);
     *level = (unsigned int)(percent * 100);
     IMGPROC_FUNC_EXIT
@@ -1853,7 +1744,23 @@ XCamReturn rk_aiq_uapi_setMTNRStrth(const rk_aiq_sys_ctx_t* ctx, bool on, unsign
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, setMTNRStrth failed!");
     }
-    ret = rk_aiq_user_api_anr_SetLumaTFStrength(ctx, level / 100.0);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_anr_SetLumaTFStrength(ctx, level / 100.0);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_abayernrV2_SetTFStrength(ctx, level / 100.0);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_bayertnr_strength_v2_t bayertnrV2Strenght;
+        bayertnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        bayertnrV2Strenght.strength_enable = true;
+        bayertnrV2Strenght.percent = level / 100.0;
+        ret = rk_aiq_user_api_abayertnrV2_SetStrength(ctx, &bayertnrV2Strenght);
+    }
+
     RKAIQ_IMGPROC_CHECK_RET(ret, "setMTNRStrth failed!", ret);
     IMGPROC_FUNC_EXIT
     return ret;
@@ -1878,7 +1785,21 @@ XCamReturn rk_aiq_uapi_getMTNRStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, unsig
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "ctx is null, getMTNRStrth failed!");
     }
-    ret = rk_aiq_user_api_anr_GetLumaTFStrength(ctx, &percent);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_anr_GetLumaTFStrength(ctx, &percent);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_abayernrV2_GetTFStrength(ctx, &percent);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_bayertnr_strength_v2_t bayertnrV2Strenght;
+        bayertnrV2Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ret = rk_aiq_user_api_abayertnrV2_GetStrength(ctx, &bayertnrV2Strenght);
+        percent = bayertnrV2Strenght.percent;
+    }
     RKAIQ_IMGPROC_CHECK_RET(ret, "getMTNRStrth failed!", ret);
     *level = (unsigned int)(percent * 100);
     IMGPROC_FUNC_EXIT
@@ -1887,30 +1808,31 @@ XCamReturn rk_aiq_uapi_getMTNRStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, unsig
 
 /*
 **********************************************************
-* Dehazer
+* Dehaze
 **********************************************************
 */
 /*
 *****************************
 *
-* Desc: set dehaze mode
+* Desc: set/get dehaze mode
 * Argument:
 *   mode:
-*     auto: auto dehaze
-*     manual：manual dehaze
+*     auto: auto dehaze, when use auto, equal use rk_aiq_uapi_enableDhz
+*     manual: Manual dehaze, when needs to use manual, please use rk_aiq_uapi_setMDhzStrth
 *
 *****************************
-*/
+*//*
 XCamReturn rk_aiq_uapi_setDhzMode(const rk_aiq_sys_ctx_t* ctx, opMode_t mode)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     adehaze_sw_t attr;
+    memset(&attr, 0, sizeof(attr));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "param error, ctx is NULL!");
     }
-
+    attr.byPass = false;
     if (mode == OP_AUTO) {
         attr.mode = RK_AIQ_DEHAZE_MODE_AUTO;
         ret = rk_aiq_user_api_adehaze_setSwAttrib(ctx, attr);
@@ -1931,6 +1853,7 @@ XCamReturn rk_aiq_uapi_getDhzMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     adehaze_sw_t attr;
+    memset(&attr, 0, sizeof(attr));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -1945,10 +1868,11 @@ XCamReturn rk_aiq_uapi_getDhzMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
     } else {
         *mode = OP_INVAL;
     }
+
     IMGPROC_FUNC_EXIT
     return ret;
 }
-
+*/
 /*
 *****************************
 *
@@ -1956,13 +1880,15 @@ XCamReturn rk_aiq_uapi_getDhzMode(const rk_aiq_sys_ctx_t* ctx, opMode_t *mode)
 *     this function is active for dehaze is manual mode
 * Argument:
 *   level: [0, 10]
+*   Do not need to use rk_aiq_uapi_enableDhz and rk_aiq_uapi_setDhzMode before use this
 *
 *****************************
-*/
+*//*
 XCamReturn rk_aiq_uapi_setMDhzStrth(const rk_aiq_sys_ctx_t* ctx, bool on, unsigned int level)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     adehaze_sw_t attr;
+    memset(&attr, 0, sizeof(attr));
     IMGPROC_FUNC_ENTER
 
     if (ctx == NULL) {
@@ -1977,6 +1903,7 @@ XCamReturn rk_aiq_uapi_setMDhzStrth(const rk_aiq_sys_ctx_t* ctx, bool on, unsign
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "param error, strength range is [1,10]!");
     }
+    attr.byPass = false;
     attr.mode = RK_AIQ_DEHAZE_MODE_MANUAL;
     attr.stManual.strength = level;
     ret = rk_aiq_user_api_adehaze_setSwAttrib(ctx, attr);
@@ -1989,6 +1916,7 @@ XCamReturn rk_aiq_uapi_getMDhzStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, unsig
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     adehaze_sw_t attr;
+    memset(&attr, 0, sizeof(attr));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -1996,6 +1924,7 @@ XCamReturn rk_aiq_uapi_getMDhzStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, unsig
     }
     ret = rk_aiq_user_api_adehaze_getSwAttrib(ctx, &attr);
     RKAIQ_IMGPROC_CHECK_RET(ret, "getMDhzStrth failed in get attrib!");
+
     if (attr.mode != RK_AIQ_DEHAZE_MODE_MANUAL) {
         LOGE("Not in manual mode!");
         *level = 0;
@@ -2004,21 +1933,33 @@ XCamReturn rk_aiq_uapi_getMDhzStrth(const rk_aiq_sys_ctx_t* ctx, bool *on, unsig
         *level = attr.stManual.strength;
         *on = true;
     }
+
+
     IMGPROC_FUNC_EXIT
     return ret;
-}
-
+}*/
+/*
+*****************************
+*
+* Desc: enable dehaze
+* Argument:
+*   When dehaze enable, dehaze on and para use use IQ xml
+*   When dehaze disable, dehaze off and enhance para use use IQ xml
+*
+*****************************
+*//*
 XCamReturn rk_aiq_uapi_enableDhz(const rk_aiq_sys_ctx_t* ctx)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     adehaze_sw_t attr;
-
+    memset(&attr, 0, sizeof(attr));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "param error, ctx is NULL!");
     }
     attr.byPass = false;
+    attr.mode = RK_AIQ_DEHAZE_MODE_AUTO;
     ret = rk_aiq_user_api_adehaze_setSwAttrib(ctx, attr);
     RKAIQ_IMGPROC_CHECK_RET(ret, "enable dehaze failed!");
     IMGPROC_FUNC_EXIT
@@ -2029,7 +1970,7 @@ XCamReturn rk_aiq_uapi_disableDhz(const rk_aiq_sys_ctx_t* ctx)
 {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
     adehaze_sw_t attr;
-
+    memset(&attr, 0, sizeof(attr));
     IMGPROC_FUNC_ENTER
     if (ctx == NULL) {
         ret = XCAM_RETURN_ERROR_PARAM;
@@ -2042,7 +1983,7 @@ XCamReturn rk_aiq_uapi_disableDhz(const rk_aiq_sys_ctx_t* ctx)
     IMGPROC_FUNC_EXIT
     return ret;
 }
-
+*/
 /*
 **********************************************************
 * Image adjust
@@ -2139,7 +2080,7 @@ XCamReturn rk_aiq_uapi_getBrightness(const rk_aiq_sys_ctx_t* ctx, unsigned int *
     }
     ret = rk_aiq_user_api_acp_GetAttrib(ctx, &attrib);
     RKAIQ_IMGPROC_CHECK_RET(ret, "get brightness failed!");
-    *level = attrib.contrast;
+    *level = attrib.brightness;
     IMGPROC_FUNC_EXIT
     return ret;
 }
@@ -2267,7 +2208,21 @@ XCamReturn rk_aiq_uapi_setSharpness(const rk_aiq_sys_ctx_t* ctx, unsigned int le
         RKAIQ_IMGPROC_CHECK_RET(ret, "level out of range, set sharpeness failed!");
     }
     fPercent = level / 100.0f;
-    ret = rk_aiq_user_api_asharp_SetStrength(ctx, fPercent);
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_asharp_SetStrength(ctx, fPercent);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_asharpV3_SetStrength(ctx, fPercent);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_sharp_strength_v4_t sharpV4Strenght;
+        sharpV4Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        sharpV4Strenght.strength_enable = true;
+        sharpV4Strenght.percent = fPercent;
+        ret = rk_aiq_user_api_asharpV4_SetStrength(ctx, &sharpV4Strenght);
+    }
     RKAIQ_IMGPROC_CHECK_RET(ret, "set sharpeness failed!");
     IMGPROC_FUNC_EXIT
 
@@ -2284,8 +2239,24 @@ XCamReturn rk_aiq_uapi_getSharpness(const rk_aiq_sys_ctx_t* ctx, unsigned int *l
         ret = XCAM_RETURN_ERROR_PARAM;
         RKAIQ_IMGPROC_CHECK_RET(ret, "param error, get sharpeness failed!");
     }
-    ret = rk_aiq_user_api_asharp_GetStrength(ctx, &fPercent);
+
+    if (CHECK_ISP_HW_V20()) {
+        ret = rk_aiq_user_api_asharp_GetStrength(ctx, &fPercent);
+    }
+
+    if (CHECK_ISP_HW_V21()) {
+        ret = rk_aiq_user_api_asharpV3_GetStrength(ctx, &fPercent);
+    }
+
+    if (CHECK_ISP_HW_V30()) {
+        rk_aiq_sharp_strength_v4_t sharpV4Strenght;
+        sharpV4Strenght.sync.sync_mode = RK_AIQ_UAPI_MODE_SYNC;
+        ret = rk_aiq_user_api_asharpV4_GetStrength(ctx, &sharpV4Strenght);
+        fPercent = sharpV4Strenght.percent;
+    }
+
     RKAIQ_IMGPROC_CHECK_RET(ret, "get sharpeness failed!");
+
     *level = (unsigned int)(fPercent * 100);
     IMGPROC_FUNC_EXIT
     return ret;
@@ -2294,9 +2265,8 @@ XCamReturn rk_aiq_uapi_getSharpness(const rk_aiq_sys_ctx_t* ctx, unsigned int *l
 /*
 *****************************
 *
-* Desc: Adjust image gamma level
-* Argument:
-*    level: gamma level, [0, 100]
+* Desc: Adjust image gamma
+*
 *****************************
 */
 XCamReturn rk_aiq_uapi_setGammaCoef(const rk_aiq_sys_ctx_t* ctx, rk_aiq_gamma_attrib_t gammaAttr)
@@ -2455,6 +2425,24 @@ XCamReturn rk_aiq_uapi_setFecCorrectDirection(const rk_aiq_sys_ctx_t* ctx,
     ret = rk_aiq_user_api_afec_GetAttrib(ctx, &fecAttr);
     RKAIQ_IMGPROC_CHECK_RET(ret, "get fec attrib failed!");
     fecAttr.direction = direction;
+    ret = rk_aiq_user_api_afec_SetAttrib(ctx, fecAttr);
+    IMGPROC_FUNC_EXIT
+    return ret;
+}
+
+XCamReturn rk_aiq_uapi_setFecCorrectMode(const rk_aiq_sys_ctx_t* ctx,
+        const fec_correct_mode_t mode)
+{
+    XCamReturn ret = XCAM_RETURN_NO_ERROR;
+    IMGPROC_FUNC_ENTER
+    if (ctx == NULL) {
+        ret = XCAM_RETURN_ERROR_PARAM;
+        RKAIQ_IMGPROC_CHECK_RET(ret, "param error!");
+    }
+    rk_aiq_fec_attrib_t fecAttr;
+    ret = rk_aiq_user_api_afec_GetAttrib(ctx, &fecAttr);
+    RKAIQ_IMGPROC_CHECK_RET(ret, "get fec attrib failed!");
+    fecAttr.mode = mode;
     ret = rk_aiq_user_api_afec_SetAttrib(ctx, fecAttr);
     IMGPROC_FUNC_EXIT
     return ret;

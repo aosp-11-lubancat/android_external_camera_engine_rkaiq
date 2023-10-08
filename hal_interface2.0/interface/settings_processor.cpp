@@ -241,6 +241,7 @@ SettingsProcessor::fillAeInputParams(const CameraMetadata *settings,
         aeParams->window.y_start = aeRegion.top();
         aeParams->window.x_end = aeRegion.right();
         aeParams->window.y_end = aeRegion.bottom();
+        aeParams->window.weight = aeRegion.weight();
     }
 
     // ******** exposure_coordinate
@@ -490,7 +491,9 @@ SettingsProcessor::fillAwbInputParams(const CameraMetadata *settings,
     }
 
     awbCfg->is_ccm_valid = false;
-    if (awbCtrl->awbMode == ANDROID_CONTROL_AWB_MODE_OFF) {
+    if (awbCtrl->awbMode == ANDROID_CONTROL_AWB_MODE_OFF &&
+        awbCtrl->colorCorrectionMode ==
+            ANDROID_COLOR_CORRECTION_MODE_TRANSFORM_MATRIX) {
         //# METADATA_Control colorCorrection.transform done
         entry = settings->find(ANDROID_COLOR_CORRECTION_TRANSFORM);
         if (entry.count == 9) {
@@ -1208,6 +1211,11 @@ XCamReturn
 SettingsProcessor::processRequestSettings(const CameraMetadata &settings,
                              AiqInputParams &aiqparams) {
     XCamReturn ret = XCAM_RETURN_NO_ERROR;
+
+    camera_metadata_ro_entry mode_3dnr = settings.find(RK_NR_FEATURE_3DNR_MODE);
+    if(mode_3dnr.count == 1) {
+	LOGI("3dnrmode:%d",mode_3dnr.data.u8[0]);
+    }
 
     // get use case
     aiqparams.frameUseCase = AIQ_FRAME_USECASE_PREVIEW;

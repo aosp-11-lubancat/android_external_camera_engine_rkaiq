@@ -274,15 +274,120 @@
  * - AFEC: fixed bug fec can't be dynamically switched on and off
  * - fix TMO,dehaze bugs
  * - isp driver v0.1.9
- * v2.3.0
- * - calib db: v1.4.5 magic code: 1258987 
- * - initial version of isp v21
- *   - enable all algos except asd
- *   - compatible with isp v20 
+ * v1.0x23.0
+ * - calib db: v1.4.2 magic code: 1089142 
+ * - update rkisp2x_tuner v1.0x3.0
+ * - isp driver v1.0x2.0
+ * - uAPI changes
+ *   - add rk_aiq_uapi_sysctl_setCrop/rk_aiq_uapi_sysctl_getCrop
+ *   - add rk_aiq_uapi_sysctl_preInit
+ * - fix ldch/fec memleak of aiq v1.3.0 
+ * - Open merge and tmo when mode is linear
+ * - rk_aiq_uapi_sysctl_preInit
+ * v1.0x23.1
+ * - calib db: v1.4.2 magic code: 1089142, same as v1.0x23.0
+ * - isp driver v1.0x2.1
+ * - fix some bugs introduced by v1.0x23.0
+ *   - fix normal mode noise reduction regression compared to v1.0x23.0
+ *   - Add a strategy to avoid flicker in global Tmo cuased by Tmo algo
+ *   - Fix bug that the wrong interpolation between dot=12 and dot=13 in AHDR
+ * - some cpu usage optimization
+ * v1.0x24.0
+ * - calib db: v1.4.2 magic code: 1089142, same as v1.0x23.0
+ * - isp driver v1.0x2.1, same as v1.0x23.1
+ * - add some new iqfiles
+ * - update rkisp2x_tuner v1.3.2
+ * - fix some API bugs of ahdr/adpcc/adehaze
+ * v1.0x24.1
+ * - calib db: v1.4.3 magic code: 1123951
+ *   - add cpie settings
+ * - iq_parser: disable strict tag verification
+ * - isp driver v1.0x2.1, same as v1.0x23.1
+ * - uapi: add rk_aiq_uapi_sysctl_updateIq
+ * v1.0x34.0
+ * - calib db: v1.4.3 magic code: 1123951, same as v1.0x24.1
+ * - isp driver v1.0x3.0
+ * - Change mipi_rx buf type from USRPTR to DMABUF
+ * - Open tmo enable function
+ * - add exposure to ispparams
+ * - fix aie gray_mode error of v1.023.3
+ * - gen_mesh: v3.0.2
+ * v1.0x45.1
+ * - calib db: v1.4.4 magic code: 1123951 
+ * - isp driver v1.0x4.1
+ * - support socket IPC for toolserver
+ * - support 3dnr motion detection and process 
+ * v1.0x45.2
+ * - isp driver v1.0x4.1
+ * - fix stable bugs of 3ndr motion detection
+ * - support RK-RAW data process
+ * - support runtime debug log
+ * - uApi support thread safe
+ * v1.0x45.3
+ * - optimize motion detection algo
+ * v1.0x45.4
+ * - motion detection stable issues
+ * - system stuck issues when enable fec
+ * - dump raw issues
+ * v1.0x56.1
+ * - isp driver v1.0x5.1
+ * - ensure isp/pp params are syncronized with frame
+ * - support vicap dvp interface
+ * - support dynamic lsc&nr iq cell
+ * v1.0x56.3
+ * - update motion detection algo from jimmy
+ * v2.0x60.0
+ * - isp driver v1.0x6.1
+ * - new tuning tool v2.0.0
+ * - use json iq instead of xml
+ * - reconstruct HWI & aiq_core
+ *   - HWI can produce SOF, STATS, RAW/YUV image
+ *   - aiq core support algo running in group threads
+ * - THIS VERSION ONLY SUPPORT rk356x NOW
+ * v3.0x00.1
+ * - initial version for isp3x(rk3588)
+ * - support 8k
+ * - support camgroup
+ * v3.0x8.1
+ * - support custom AE/AWB
+ * - expose UAPI2, hide old UAPI
+ * - complete rk3588 module API
+ * - add API sample code
+ * - Along with ISP drv v1.0x8.0
+ * v3.0x8.3
+ * - complete rk3588 module camgroup API
+ * - add API sample code for lsc/dpcc/ldch...
+ * v3.0x8.5
+ * - fix potential race condition in setSingleCamStatusReady
+ * - fix some bugs in Group-Hdr mode
+ * - compare with mNewAtt when setting attrib asynchronously
+ * - always listen streaming on/off event in rkaiq
+ * - Add configuration file rules for build
+ * - add more log info for awb analysis tool
+ * - add hw event callback
+ * - add group module API of CP/IE/CSM
+ * - notify all vicaps ready to app
+ * v3.0x8.7
+ * - fix compille error with gcc-4.4.7
+ * - add parameters of uapi for some algos
+ * - RkAiqxxxHandle: fix wrong 3a result caused by no 3a stats
+ * - CamGroup: skip incomplete expoure params
+ * - common: fix the compile error of 'defined but not used' with GUNC
+ * - camgroup: add refCnt for shared resources
+ * - reduce error log for RKAIQ running on serial port using 11520 baudrate
+ * - add the function of reading/writing uapi parameters in real time for iq tools
+ * v3.0x8.8
+ * - hwi: optimize log printing for HWI
+ * - camgroup: return error when the params of algos is incorrect
+ * - PDAF: fix touchaf is abnormal
+ * - AF: support optical zoom on android
+ * - AF: adapt more type zoom-focus curve
+ * - AE: delete extra Semicolon & add pointer release in GrpAE
+ * - hwi: fix segment fault in setIspConfig when stopping AIQ
  */
 
-#define RK_AIQ_VERSION_REAL_V "v2.3.0"
-#define RK_AIQ_RELEASE_DATE "2020-12-09"
+#define RK_AIQ_VERSION_REAL_V "v3.0x8.8"
+#define RK_AIQ_RELEASE_DATE "2022-05-05"
 
 /******* DO NOT EDIT THE FOLLOWINGS ***********/
 

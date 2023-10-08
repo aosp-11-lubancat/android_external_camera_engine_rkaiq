@@ -4,6 +4,12 @@ SRC_CPP := $(wildcard $(LOCAL_PATH)/demo/*.cpp)
 SRC_C := $(wildcard $(LOCAL_PATH)/demo/*.c)
 SRC_C += $(wildcard $(LOCAL_PATH)/demo/drmDsp/*.c)
 
+ifneq ($(filter rk1126 rk356x, $(strip $(TARGET_BOARD_PLATFORM))), )
+LOCAL_CPPFLAGS += -DISP_HW_V21
+endif
+ifneq ($(filter rk3588, $(strip $(TARGET_BOARD_PLATFORM))), )
+LOCAL_CPPFLAGS += -DISP_HW_V30
+endif
 LOCAL_SRC_FILES :=\
 	demo/drmDsp.c \
 	demo/drmDsp/bo.c \
@@ -11,6 +17,8 @@ LOCAL_SRC_FILES :=\
 	demo/drmDsp/modeset.c \
 	demo/rkisp_demo.cpp \
 	demo/rkRgaApi.cpp \
+    demo/ae_algo_demo/third_party_ae_algo.cpp \
+    demo/awb_algo_demo/third_party_awb_algo.cpp \
 
 #TODO: have compile issue on Android now
 	#demo/rga_control.c \
@@ -28,7 +36,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/demo/include/rga \
 	$(LOCAL_PATH)/demo/include/libdrm \
 	$(LOCAL_PATH)/demo/drmDsp \
+	$(LOCAL_PATH)/demo/sample \
 	$(LOCAL_PATH)/../../include/uAPI \
+	$(LOCAL_PATH)/../../include/uAPI2 \
 	$(LOCAL_PATH)/../../include/xcore \
 	$(LOCAL_PATH)/../../include/algos \
 	$(LOCAL_PATH)/../../include/common \

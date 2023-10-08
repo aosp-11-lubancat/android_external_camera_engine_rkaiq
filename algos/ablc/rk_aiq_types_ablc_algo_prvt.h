@@ -22,26 +22,33 @@
 
 #include "ablc/rk_aiq_types_ablc_algo_int.h"
 #include "RkAiqCalibDbTypes.h"
+#include "RkAiqCalibDbTypesV2.h"
 #include "xcam_log.h"
 #include "xcam_common.h"
 
-RKAIQ_BEGIN_DECLARE
 
 typedef struct AblcContext_s {
+    AblcOPMode_t eMode;
+    AblcParams_t stBlc0Params;
+    AblcParams_t stBlc1Params;
+    AblcSelect_t stBlc0Select;
+    AblcSelect_t stBlc1Select;
+    AblcManualAttr_t stBlc0Manual;
+    AblcManualAttr_t stBlc1Manual;
+    AblcProc_t ProcRes;
+
     AblcExpInfo_t stExpInfo;
     AblcState_t eState;
-    AblcOPMode_t eMode;
 
-    AblcAutoAttr_t stAuto;
-    AblcManualAttr_t stManual;
+    CalibDbV2_Ablc_t stBlcCalib;
+    int prepare_type;
 
-    CalibDb_Blc_t stBlcCalib;
-	AblcParamMode_t eParamMode;
+    int isReCalculate;
+    bool isUpdateParam;
+
 } AblcContext_t;
 
 
-
-RKAIQ_END_DECLARE
 
 #endif
 

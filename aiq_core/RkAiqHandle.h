@@ -20,44 +20,96 @@
 #ifndef _RK_AIQ_HANDLE_H_
 #define _RK_AIQ_HANDLE_H_
 
-#include "rk_aiq_types.h"
+#include <map>
+
 #include "rk_aiq_algo_types.h"
+#include "rk_aiq_types.h"
+#include "xcam_mutex.h"
+#include "rk_aiq_pool.h"
 
 namespace RkCam {
 
+/*
+ --------------------------------
+|         :RkAiqHandle           |
+ --------------------------------
+|  rk_aiq_xxx_attrib_t mCurAtt;  |
+|  rk_aiq_xxx_attrib_t mNewAtt;  |
+|        Mutex mCfgMutex;        |
+|        bool updateAtt;         |
+ --------------------------------
+|         updateConfig()         |
+ --------------------------------
+*/
+
 class RkAiqCore;
+struct RkAiqAlgosGroupShared_s;
+
 class RkAiqHandle {
-public:
+ public:
     explicit RkAiqHandle(RkAiqAlgoDesComm* des, RkAiqCore* aiqCore);
     virtual ~RkAiqHandle();
-    void setEnable(bool enable) {
-        mEnable = enable;
-    };
-    void setReConfig(bool reconfig) {
-        mReConfig = reconfig;
-    };
-    bool getEnable() {
-        return mEnable;
-    };
+    void setEnable(bool enable) { mEnable = enable; };
+    void setReConfig(bool reconfig) { mReConfig = reconfig; };
+    bool getEnable() { return mEnable; };
     virtual XCamReturn prepare();
     virtual XCamReturn preProcess();
     virtual XCamReturn processing();
     virtual XCamReturn postProcess();
-    RkAiqAlgoContext* getAlgoCtx() {
-        return mAlgoCtx;
+    virtual XCamReturn genIspResult(RkAiqFullParams* params, RkAiqFullParams* cur_params) { return XCAM_RETURN_NO_ERROR; };
+    RkAiqAlgoContext* getAlgoCtx() { return mAlgoCtx; }
+    const int getAlgoId() const { return mDes->id; }
+    const int getAlgoType() const { return mDes->type; }
+    void setGroupId(int32_t gId) {
+        mGroupId = gId;
     }
-    int getAlgoId() {
-        return mDes->id;
+    int32_t getGroupId() {
+       return mGroupId;
     }
-    int getAlgoType() {
-        return mDes->type;
+
+    void setNextHdl(RkAiqHandle* next) {
+        mNextHdl = next;
     }
-    virtual XCamReturn updateConfig(bool needSync) {
-        return XCAM_RETURN_NO_ERROR;
-    };
-protected:
+
+    void setParentHdl(RkAiqHandle* parent) {
+        mParentHdl = parent;
+    }
+
+    RkAiqHandle* getNextHdl() {
+       return mNextHdl;
+    }
+
+    RkAiqHandle* getParent() {
+       return mParentHdl;
+    }
+
+    // rk algo running with custom algo concunrrently
+    void setMulRun(bool isMulRun) {
+        mIsMulRun = isMulRun;
+        if (isMulRun && mDes->id == 0)
+            mPostShared = false;
+        else
+            mPostShared = true;
+    }
+
+    void setGroupShared(void* grp_shared) {
+        mAlogsGroupSharedParams = grp_shared;
+    }
+    void* getGroupShared() {
+       return mAlogsGroupSharedParams;
+    }
+    virtual XCamReturn updateConfig(bool needSync) { return XCAM_RETURN_NO_ERROR; };
+    virtual RkAiqAlgoResCom* getPreProcRes() {
+        return mPreOutParam;
+    }
+    virtual RkAiqAlgoResCom* getProcProcRes() {
+        return mProcOutParam;
+    }
+ protected:
     virtual void init() = 0;
     virtual void deInit();
+    void waitSignal(rk_aiq_uapi_mode_sync_e sync = RK_AIQ_UAPI_MODE_DEFAULT);
+    void sendSignal(rk_aiq_uapi_mode_sync_e sync = RK_AIQ_UAPI_MODE_DEFAULT);
     enum {
         RKAIQ_CONFIG_COM_PREPARE,
         RKAIQ_CONFIG_COM_PRE,
@@ -65,67 +117,79 @@ protected:
         RKAIQ_CONFIG_COM_POST,
     };
     virtual XCamReturn configInparamsCom(RkAiqAlgoCom* com, int type);
-    RkAiqAlgoCom*     mConfig;
-    RkAiqAlgoCom*     mPreInParam;
-    RkAiqAlgoResCom*  mPreOutParam;
-    RkAiqAlgoCom*     mProcInParam;
-    RkAiqAlgoResCom*  mProcOutParam;
-    RkAiqAlgoCom*     mPostInParam;
-    RkAiqAlgoResCom*  mPostOutParam;
-    RkAiqAlgoDesComm* mDes;
+    RkAiqAlgoCom* mConfig;
+    RkAiqAlgoCom* mPreInParam;
+    RkAiqAlgoResCom* mPreOutParam;
+    RkAiqAlgoCom* mProcInParam;
+    RkAiqAlgoResCom* mProcOutParam;
+    RkAiqAlgoCom* mPostInParam;
+    RkAiqAlgoResCom* mPostOutParam;
+    const RkAiqAlgoDesComm* mDes;
     RkAiqAlgoContext* mAlgoCtx;
-    RkAiqCore*        mAiqCore;
-    bool              mEnable;
-    bool              mReConfig;
+    RkAiqCore* mAiqCore;
+    bool mEnable;
+    bool mReConfig;
+    uint32_t mGroupId;
+    void* mAlogsGroupSharedParams;
+    XCam::Mutex mCfgMutex;
+    mutable std::atomic<bool> updateAtt;
+    XCam::Cond mUpdateCond;
+    RkAiqHandle* mNextHdl;
+    RkAiqHandle* mParentHdl;
+    bool mIsMulRun;
+    bool mPostShared;
 };
 
-#define RKAIQHANDLE(algo) \
-    class RkAiq##algo##Handle: virtual public RkAiqHandle { \
-    public: \
-        explicit RkAiq##algo##Handle(RkAiqAlgoDesComm* des, RkAiqCore* aiqCore) \
-                    : RkAiqHandle(des, aiqCore) {}; \
-        virtual ~RkAiq##algo##Handle() { deInit(); }; \
-        virtual XCamReturn prepare(); \
-        virtual XCamReturn preProcess(); \
-        virtual XCamReturn processing(); \
-        virtual XCamReturn postProcess(); \
-    protected: \
-        virtual void init(); \
-        virtual void deInit() { RkAiqHandle::deInit(); }; \
+template <typename T>
+RkAiqHandle* createT(RkAiqAlgoDesComm* des, RkAiqCore* aiqCore) {
+    return new T(des, aiqCore);
+}
+
+struct RkAiqHandleFactory {
+    typedef std::map<std::string, RkAiqHandle* (*)(RkAiqAlgoDesComm* des, RkAiqCore* aiqCore)>
+        map_type;
+
+    ~RkAiqHandleFactory() {
+        if (map != nullptr) {
+            if (map->empty()) {
+                delete map;
+            }
+        }
     }
 
-// define
-RKAIQHANDLE(Ae);
-RKAIQHANDLE(Awb);
-RKAIQHANDLE(Af);
-RKAIQHANDLE(Ahdr);
-RKAIQHANDLE(Anr);
-RKAIQHANDLE(Alsc);
-RKAIQHANDLE(Asharp);
-RKAIQHANDLE(Adhaz);
-RKAIQHANDLE(Asd);
-RKAIQHANDLE(Acp);
-RKAIQHANDLE(A3dlut);
-RKAIQHANDLE(Ablc);
-RKAIQHANDLE(Accm);
-RKAIQHANDLE(Acgc);
-RKAIQHANDLE(Adebayer);
-RKAIQHANDLE(Adpcc);
-RKAIQHANDLE(Afec);
-RKAIQHANDLE(Agamma);
-RKAIQHANDLE(Agic);
-RKAIQHANDLE(Aie);
-RKAIQHANDLE(Aldch);
-RKAIQHANDLE(Ar2y);
-RKAIQHANDLE(Awdr);
-RKAIQHANDLE(Aorb);
-RKAIQHANDLE(Amfnr);
-RKAIQHANDLE(Aynr);
-RKAIQHANDLE(Acnr);
-RKAIQHANDLE(Arawnr);
-RKAIQHANDLE(Adrc);
-RKAIQHANDLE(AdrcV21);
+    static RkAiqHandle* createInstance(std::string const& s, RkAiqAlgoDesComm* des,
+                                       RkAiqCore* aiqCore) {
+        map_type::iterator it = getMap()->find(s);
+        if (it == getMap()->end()) return 0;
+        return it->second(des, aiqCore);
+    }
 
-}; //namespace RkCam
+ protected:
+    static map_type* getMap() {
+        // never delete'ed. (exist until program termination)
+        // because we can't guarantee correct destruction order
+        if (!map) {
+            map = new map_type;
+        }
+        return map;
+    }
+
+ private:
+    static map_type* map;
+};
+
+template <typename T>
+struct RkAiqHandleRegister : RkAiqHandleFactory {
+    RkAiqHandleRegister(std::string const& s) : s_(s) { getMap()->insert(std::make_pair(s, &createT<T>)); }
+    ~RkAiqHandleRegister() { getMap()->erase(s_); }
+private:
+    const std::string s_;
+};
+
+#define DECLARE_HANDLE_REGISTER_TYPE(NAME) static RkAiqHandleRegister<NAME> reg
+
+#define DEFINE_HANDLE_REGISTER_TYPE(NAME) RkAiqHandleRegister<NAME> NAME::reg(#NAME)
+
+};  // namespace RkCam
 
 #endif

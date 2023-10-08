@@ -39,6 +39,14 @@ rk_aiq_uapi_a3dlut_Query3dlutInfo(const RkAiqAlgoContext *ctx,
            sizeof(lut3d_querry_info->look_up_table_r));
     lut3d_querry_info->lut3d_en = alut3d_context->lut3d_hw_conf.enable;
 
+    lut3d_querry_info->alpha = 1;
+    memset(lut3d_querry_info->name, 0x0, sizeof(lut3d_querry_info->name));
+    if (lut3d_querry_info->lut3d_en && alut3d_context->mCurAtt.mode == RK_AIQ_LUT3D_MODE_AUTO){
+        lut3d_querry_info->alpha = alut3d_context->restinfo.alpha;
+        strcpy(lut3d_querry_info->name, alut3d_context->restinfo.pLutProfile->name);
+    }
+
+
     return XCAM_RETURN_NO_ERROR;
 }
 

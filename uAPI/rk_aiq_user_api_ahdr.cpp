@@ -24,30 +24,50 @@ RKAIQ_BEGIN_DECLARE
 #define CHECK_USER_API_ENABLE
 #endif
 
+/*
 XCamReturn
 rk_aiq_user_api_ahdr_SetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, ahdr_attrib_t attr)
 {
-    CHECK_USER_API_ENABLE(RK_AIQ_ALGO_TYPE_AHDR);
-    RkAiqAhdrHandleInt* algo_handle =
-        algoHandle<RkAiqAhdrHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_AHDR);
+    amerge_attrib_t mergeAttr;
+    memset(&mergeAttr, 0, sizeof(amerge_attrib_t));
+    atmo_attrib_t tmoAttr;
+    memset(&tmoAttr, 0, sizeof(atmo_attrib_t));
 
-    if (algo_handle) {
-        return algo_handle->setAttrib(attr);
-    }
+    TransferSetData(&mergeAttr, &tmoAttr, &attr);
 
-    return XCAM_RETURN_NO_ERROR;
+    XCamReturn ret_amerge = rk_aiq_user_api2_amerge_SetAttrib(sys_ctx, mergeAttr);
+    XCamReturn ret_atmo = rk_aiq_user_api2_atmo_SetAttrib(sys_ctx, tmoAttr);
+
+
+    if (ret_amerge != XCAM_RETURN_NO_ERROR)
+        return ret_amerge;
+
+    if (ret_atmo != XCAM_RETURN_NO_ERROR)
+        return ret_atmo;
+
+    return  XCAM_RETURN_NO_ERROR;
 }
+
 XCamReturn
 rk_aiq_user_api_ahdr_GetAttrib(const rk_aiq_sys_ctx_t* sys_ctx, ahdr_attrib_t* attr)
 {
-    RkAiqAhdrHandleInt* algo_handle =
-        algoHandle<RkAiqAhdrHandleInt>(sys_ctx, RK_AIQ_ALGO_TYPE_AHDR);
+    amerge_attrib_t mergeAttr;
+    memset(&mergeAttr, 0, sizeof(amerge_attrib_t));
+    atmo_attrib_t tmoAttr;
+    memset(&tmoAttr, 0, sizeof(atmo_attrib_t));
 
-    if (algo_handle) {
-        return algo_handle->getAttrib(attr);
-    }
+    TransferGetData(&mergeAttr, &tmoAttr, attr);
+
+    XCamReturn ret_amerge = rk_aiq_user_api2_amerge_GetAttrib(sys_ctx, &mergeAttr);
+    XCamReturn ret_atmo = rk_aiq_user_api2_atmo_GetAttrib(sys_ctx, &tmoAttr);
+
+    if (ret_amerge != XCAM_RETURN_NO_ERROR)
+        return ret_amerge;
+
+    if (ret_atmo != XCAM_RETURN_NO_ERROR)
+        return ret_atmo;
 
     return XCAM_RETURN_NO_ERROR;
 }
-
+*/
 RKAIQ_END_DECLARE

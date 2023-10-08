@@ -19,41 +19,44 @@
 #include "rk_aiq_algo_types.h"
 #include "xcam_log.h"
 #include "rk_aiq_types_adrc_stat_v200.h"
+#include "RkAiqCalibDbV2Helper.h"
+#include "amerge/rk_aiq_types_amerge_algo_prvt.h"
+#include "rk_aiq_types_adrc_algo_int.h"
 
 
 
-#define LIMIT_VALUE(value,max_value,min_value)      (value > max_value? max_value : value < min_value ? min_value : value)
-#define SHIFT6BIT(A)         (A*64)
-#define SHIFT7BIT(A)         (A*128)
-#define SHIFT10BIT(A)         (A*1024)
-#define SHIFT11BIT(A)         (A*2048)
-#define SHIFT12BIT(A)         (A*4096)
+#define DRCGAINMAX     (8)
+#define DRCGAINMIN     (1)
+#define CLIPMAX     (64.0)
+#define CLIPMIN     (0.0)
+#define MINOGAINMAX     (2.0)
+#define MINOGAINMIN     (0.0)
+#define ADRCNORMALIZEMAX     (1.0)
+#define ADRCNORMALIZEMIN     (0.0)
+#define ADRCNORMALIZEINTMAX     (1)
+#define ADRCNORMALIZEINTMIN     (0)
+#define SPACESGMMAX     (4095)
+#define SPACESGMMIN     (0)
+#define SCALEYMAX     (2048)
+#define SCALEYMIN     (0)
+#define MANUALCURVEMAX     (8192)
+#define MANUALCURVEMIN     (0)
+#define IIRFRAMEMAX     (1000)
+#define IIRFRAMEMIN     (0)
+#define INT8BITMAX     (255)
+#define INT14BITMAX     (16383)
+#define SW_DRC_OFFSET_POW2_FIX (8)
+#define SW_DRC_MOTION_SCL_FIX (0)
+#define SW_DRC_BILAT_WT_OFF_FIX (255)
+#define MAX_AE_DRC_GAIN (256)
 
-#define LIMIT_PARA(a,b,c,d,e)      (c+(a-e)*(b-c)/(d -e))
-
-#define ENVLVMAX     (1.0)
-#define ENVLVMIN     (0.0)
-#define MOVECOEFMAX     (1.0)
-#define MOVECOEFMIN     (0.0)
-#define OEPDFMAX     (1.0)
-#define OEPDFMIN     (0.0)
-#define FOCUSLUMAMAX     (100)
-#define FOCUSLUMAMIN     (1)
-#define DAMPMAX     (1.0)
-#define DAMPMIN     (0.0)
-#define DARKPDFTHMAX     (1.0)
-#define DARKPDFTHMIN     (0.0)
-#define TOLERANCEMAX     (20.0)
-#define TOLERANCEMIN     (0.0)
-#define DARKPDFMAX     (1)
-#define DARKPDFMIN     (0)
-#define ISOMIN     (50)
-#define ISOMAX     (204800)
-#define DYNAMICRANGEMAX     (84)
-#define DYNAMICRANGEMIN     (1)
-#define ADRC_MAX_IQ_DOTS (13)
-
-
+#define ISP_RAW_BIT (12)
+#define MFHDR_LOG_Q_BITS (11)
+#define DSTBITS (ISP_RAW_BIT << MFHDR_LOG_Q_BITS)
+#define OFFSETBITS_INT (SW_DRC_OFFSET_POW2_FIX)
+#define OFFSETBITS (OFFSETBITS_INT << MFHDR_LOG_Q_BITS)
+#define VALIDBITS (DSTBITS - OFFSETBITS)
+#define DELTA_SCALEIN_FIX ((256 << MFHDR_LOG_Q_BITS) / VALIDBITS)
 
 
 typedef enum AdrcState_e {
@@ -65,62 +68,154 @@ typedef enum AdrcState_e {
     ADRC_STATE_MAX
 } AdrcState_t;
 
-typedef struct DrcHandleData_s
-{
-    float sw_drc_offset_pow2;//
-	float sw_drc_compres_scl;//sys
-	float sw_drc_position;
-	float sw_drc_delta_scalein;//
-	float sw_drc_hpdetail_ratio;
-	float sw_drc_lpdetail_ratio;
-	float sw_drc_weicur_pix;//
-	float sw_drc_weipre_frame;//
-	float sw_drc_force_sgm_inv0;//
-	float sw_drc_motion_scl;//
-	float sw_drc_edge_scl;//
-	float sw_drc_space_sgm_inv1;//
-	float sw_drc_space_sgm_inv0;//
-	float sw_drc_range_sgm_inv1;//
-	float sw_drc_range_sgm_inv0;//
-	float sw_drc_weig_maxl;//
-	float sw_drc_weig_bilat;//
-	float sw_drc_gain_y[ISP21_DRC_Y_NUM];
-	float sw_drc_compres_y[ISP21_DRC_Y_NUM];//
-	float sw_drc_scale_y[ISP21_DRC_Y_NUM];//
-	float sw_drc_adrc_gain;
-	float sw_drc_iir_weight;//
-	float sw_drc_min_ogain;//
+typedef struct DrcExpoData_s {
+    float nextLExpo;
+    float nextMExpo;
+    float nextSExpo;
+    float nextRatioLS;
+    float nextRatioLM;
+} DrcExpoData_t;
 
+typedef struct AdrcGainConfig_s {
+    int len;
+    float*            EnvLv;
+    float*            DrcGain;
+    float*            Alpha;
+    float*            Clip;
+} AdrcGainConfig_t;
+
+typedef struct HighLightConfig_s
+{
+    int len;
+    float*            EnvLv;
+    float*            Strength;
+} HighLightConfig_t;
+
+typedef struct LocalDataConfig_s
+{
+    int len;
+    float*            EnvLv;
+    float*            LocalWeit;
+    float*            GlobalContrast;
+    float*            LoLitContrast;
+} LocalDataConfig_t;
+
+typedef struct LocalDataConfigV2_s
+{
+    int len;
+    float*            EnvLv;
+    float*            LocalWeit;
+    int*            LocalAutoEnable;
+    float*            LocalAutoWeit;
+    float*            GlobalContrast;
+    float*            LoLitContrast;
+} LocalDataConfigV2_t;
+
+typedef struct DrcOhters_s
+{
+    float curPixWeit;
+    float preFrameWeit;
+    float Range_force_sgm;
+    float Range_sgm_cur;
+    float Range_sgm_pre;
+    int Space_sgm_cur;
+    int Space_sgm_pre;
+    int Scale_y[ADRC_Y_NUM];
+    float ByPassThr;
+    float Edge_Weit;
+    float Tolerance;
+    int IIR_frame;
+    float damp;
+} DrcOhters_t;
+
+typedef struct CompressConfig_s
+{
+    CompressMode_t Mode;
+    uint16_t       Manual_curve[ADRC_Y_NUM];
+} CompressConfig_t;
+
+typedef struct AdrcConfigV21_s
+{
+    bool Enable;
+    bool OutPutLongFrame;
+    AdrcGainConfig_t DrcGain;
+    HighLightConfig_t HiLit;
+    LocalDataConfig_t Local;
+    CompressConfig_t Compress;
+    DrcOhters_t Others;
+} AdrcConfigV21_t;
+
+typedef struct AdrcConfigV30_s
+{
+    bool Enable;
+    bool OutPutLongFrame;
+    AdrcGainConfig_t DrcGain;
+    HighLightConfig_t HiLit;
+    LocalDataConfigV2_t Local;
+    CompressConfig_t Compress;
+    DrcOhters_t Others;
+} AdrcConfigV30_t;
+
+typedef struct AdrcConfig_s {
+    union {
+        AdrcConfigV21_t Drc_v21;
+        AdrcConfigV30_t Drc_v30;
+    };
+} AdrcConfig_t;
+
+typedef struct DrcHandleDataV21_s
+{
+    float DrcGain;
+    float Alpha;
+    float Clip;
+    float Strength;
+    float LocalWeit;
+    float GlobalContrast;
+    float LoLitContrast;
+    CompressMode_t Mode;
+    uint16_t       Manual_curve[ADRC_Y_NUM];
+} DrcHandleDataV21_t;
+
+typedef struct DrcHandleDataV30_s
+{
+    float DrcGain;
+    float Alpha;
+    float Clip;
+    float Strength;
+    float LocalWeit;
+    int LocalAutoEnable;
+    float LocalAutoWeit;
+    float GlobalContrast;
+    float LoLitContrast;
+    CompressMode_t Mode;
+    uint16_t       Manual_curve[ADRC_Y_NUM];
+} DrcHandleDataV30_t;
+
+typedef struct DrcHandleData_s {
+    union {
+        DrcHandleDataV21_t Drc_v21;
+        DrcHandleDataV30_t Drc_v30;
+    };
 } DrcHandleData_t;
 
 typedef struct AdrcPrevData_s
 {
-    float Ratio;
-    float Envlv;
-    float MoveCoef;
-    float OEPdf;
-    float TotalFocusLuma;
-    float DarkPdf;
+    float EnvLv;
     float ISO;
-    float DynamicRange;
-    DrcHandleData_t DrcHandleData;
+    float MotionCoef;
+    drc_OpMode_t ApiMode;
+    int frameCnt;
+    DrcHandleData_t HandleData;
 } AdrcPrevData_t;
 
 typedef struct CurrAeResult_s {
-    //TODO
     float MeanLuma[3];
-    float LfrmDarkLuma;
-    float LfrmDarkPdf;
-    float LfrmOverExpPdf;
-    float SfrmMaxLuma;
-    float SfrmMaxLumaPdf;
     float GlobalEnvLv;
     float L2M_Ratio;
     float M2S_Ratio;
-    float DynamicRange;
-    float OEPdf; //the pdf of over exposure in long frame
-    float DarkPdf; //the pdf of dark region in long frame
-    float ISO; //use long frame
+    float ISO;
+    float AEMaxRatio;
+
 
     float Lv_fac;
     float DarkPdf_fac;
@@ -130,46 +225,31 @@ typedef struct CurrAeResult_s {
     float BlockLumaL[225];
 } CurrAeResult_t;
 
-typedef struct {
-    unsigned char valid;
-    int id;
-    int depth;
-} AfDepthInfo_t;
-
-typedef struct CurrAfResult_s {
-    unsigned int CurrAfTargetPos;
-    unsigned int CurrAfTargetWidth;
-    unsigned int CurrAfTargetHeight;
-    AfDepthInfo_t AfDepthInfo[225];
-    unsigned int GlobalSharpnessCompensated[225];
-} CurrAfResult_t;
-
 typedef struct CurrData_s
 {
+    bool Enable;
     float Ratio;
     float EnvLv;
-    float MoveCoef;
-    float DynamicRange;
-    float OEPdf;
-    float DarkPdf;
+    float MotionCoef;
     float ISO;
-    float DarkPdfTH;
-    float TotalFocusLuma;
     float Damp;
     float LumaWeight[225];
-    DrcHandleData_t DrcHandleData;
+    int frameCnt;
+    DrcHandleData_t HandleData;
+    DrcOhters_t Others;
 } CurrData_t;
 
 typedef struct AdrcProcResData_s
 {
     DrcProcRes_t DrcProcRes;
+    CompressMode_t CompressMode;
     bool LongFrameMode;
     bool isHdrGlobalTmo;
     bool bTmoEn;
     bool isLinearTmo;
 } AdrcProcResData_t;
 
-typedef struct SensorInfo_s
+typedef struct AdrcSensorInfo_s
 {
     bool  LongFrmMode;
     float HdrMinGain[MAX_HDR_FRAMENUM];
@@ -179,43 +259,31 @@ typedef struct SensorInfo_s
 
     float MaxExpoL;
     float MinExpoL;
-    float MaxExpoM;
-    float MinExpoM;
     float MaxExpoS;
     float MinExpoS;
-} SensorInfo_t;
+} AdrcSensorInfo_t;
+
+typedef struct DrcCalibDB_s {
+    union {
+        CalibDbV2_drc_t Drc_v21;
+        CalibDbV2_drc_V2_t Drc_v30;
+    };
+} DrcCalibDB_t;
 
 typedef struct AdrcContext_s
 {
-    //api
     drcAttr_t drcAttr;
-
-    CalibDb_Adrc_Para_t pCalibDB;
+    DrcCalibDB_t pCalibDB;
     AdrcState_t state;
-    AdrcConfig_t AdrcConfig;
-    AdrcPrevData_t AdrcPrevData ;
+    AdrcConfig_t Config;
+    AdrcPrevData_t PrevData ;
     AdrcProcResData_t AdrcProcRes;
-    CurrAeResult_t CurrAeResult;
-    CurrAfResult_t CurrAfResult;
-    CurrData_t CurrHandleData;
+    CurrAeResult_t CurrAeResult;;
+    CurrData_t CurrData;
     rkisp_adrc_stats_t CurrStatsData;
-    SensorInfo_t SensorInfo;
-    uint32_t width;
-    uint32_t height;
+    AdrcSensorInfo_t SensorInfo;
     int frameCnt;
-    int FrameNumber;
-    int sence_mode;
+    FrameNumber_t FrameNumber;
 } AdrcContext_t;
-
-typedef AdrcContext_t* AdrcHandle_t;
-
-typedef struct AdrcInstanceConfig_s {
-    AdrcHandle_t              hAdrc;
-} AdrcInstanceConfig_t;
-
-typedef struct _RkAiqAlgoContext {
-    AdrcInstanceConfig_t AdrcInstConfig;
-    //void* place_holder[0];
-} RkAiqAlgoContext;
 
 #endif
